@@ -1185,6 +1185,47 @@ body.result-active .main-stage {
 }
 .dots span:nth-child(2) { animation-delay:.18s; }
 .dots span:nth-child(3) { animation-delay:.36s; }
+.loading-wave {
+  min-height:380px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:28px 16px;
+}
+.loading-wave-card {
+  width:min(100%, 560px);
+  background:white;
+  border:1px solid var(--border);
+  border-radius:28px;
+  padding:34px 24px;
+  box-shadow:var(--shadow-sm);
+}
+.loading-wave-title {
+  font-family:'DM Serif Display',serif;
+  font-size:34px;
+  line-height:1.08;
+  margin-bottom:12px;
+}
+.loading-wave-sub {
+  color:var(--text2);
+  font-size:14px;
+  line-height:1.8;
+  max-width:420px;
+  margin:0 auto 22px;
+}
+.loading-status {
+  margin-top:18px;
+  font-size:15px;
+  font-weight:700;
+  color:var(--brand-dark);
+  min-height:24px;
+}
+.loading-status-note {
+  margin-top:8px;
+  color:var(--text3);
+  font-size:12px;
+}
 @keyframes dotPulse {
   0%,100% { opacity:.26; transform:scale(.7); }
   50% { opacity:1; transform:scale(1); }
@@ -2036,9 +2077,22 @@ const state = {
   email:'',
   name:'',
   ai:{
-    step1:{ requested:false, loading:false, text:'', error:'' },
-    step2:{ requested:false, loading:false, text:'', error:'' }
+    step1:{ requested:false, loading:false, text:'', error:'', statusIndex:0, statusTimer:null },
+    step2:{ requested:false, loading:false, text:'', error:'', statusIndex:0, statusTimer:null }
   }
+};
+
+const LOADING_MESSAGES = {
+  step1:[
+    'กำลังวิเคราะห์ร้าน',
+    'กำลังวิเคราะห์จุดอ่อน',
+    'กำลังสรุปภาพรวมเบื้องต้น'
+  ],
+  step2:[
+    'กำลังวิเคราะห์ร้านเชิงลึก',
+    'กำลังวิเคราะห์จุดอ่อนสำคัญ',
+    'กำลังทำแผน 30 วัน'
+  ]
 };
 
 const el = {
@@ -2062,8 +2116,8 @@ function startFlow() {
   state.phase = 'setup';
   state.current = 0;
   state.ai = {
-    step1:{ requested:false, loading:false, text:'', error:'' },
-    step2:{ requested:false, loading:false, text:'', error:'' }
+    step1:{ requested:false, loading:false, text:'', error:'', statusIndex:0, statusTimer:null },
+    step2:{ requested:false, loading:false, text:'', error:'', statusIndex:0, statusTimer:null }
   };
   document.body.classList.add('flow-active');
   document.body.classList.remove('result-active');
@@ -2142,8 +2196,10 @@ function updateHUD() {
 
   if (state.phase === 'setup') el.stepPill.textContent = 'Step 0 · ตั้งค่าร้าน';
   if (state.phase === 'quick-question') el.stepPill.textContent = `เช็กเบื้องต้น ${state.current + 1}/${QUICK_QUESTIONS.length}`;
+  if (state.phase === 'quick-loading') el.stepPill.textContent = 'กำลังวิเคราะห์ผลเบื้องต้น';
   if (state.phase === 'quick-result') el.stepPill.textContent = 'ผลเบื้องต้น · เลือกทางโตที่เหมาะกับร้าน';
   if (state.phase === 'deep-question') el.stepPill.textContent = `คำถามต่อยอด ${state.current + 1}/${getDeepQuestions().length}`;
+  if (state.phase === 'final-loading') el.stepPill.textContent = 'กำลังวิเคราะห์เชิงลึก';
   if (state.phase === 'final-preview') el.stepPill.textContent = 'ภาพรวม · ถ้าดูต่อจะโฟกัสอะไร';
 
   renderSectionChart();
@@ -2203,7 +2259,7 @@ function animateStage(renderFn) {
 
 function renderCurrent(skipAnim = false) {
   updateHUD();
-  const resultMode = state.phase === 'quick-result' || state.phase === 'final-preview';
+  const resultMode = ['quick-loading','quick-result','final-loading','final-preview'].includes(state.phase);
   el.flowShell.classList.toggle('result-mode', resultMode);
   document.body.classList.toggle('result-active', state.phase === 'final-preview');
   if (skipAnim) doRenderCurrent(); else animateStage(doRenderCurrent);
@@ -2212,12 +2268,54 @@ function renderCurrent(skipAnim = false) {
 function doRenderCurrent() {
   if (state.phase === 'setup') return renderProfileStep();
   if (state.phase === 'quick-question') return renderQuickQuestion();
+  if (state.phase === 'quick-loading') return renderLoadingScreen('step1');
   if (state.phase === 'quick-result') return renderQuickResult();
   if (state.phase === 'payment') return renderPayment();
   if (state.phase === 'deep-question') return renderDeepQuestion();
   if (state.phase === 'email-collect') return renderEmailCollect();
   if (state.phase === 'email-sent') return renderEmailSent();
+  if (state.phase === 'final-loading') return renderLoadingScreen('step2');
   return renderFinalPreview();
+}
+
+function startLoadingTicker(mode) {
+  const slot = state.ai[mode];
+  if (!slot) return;
+  if (slot.statusTimer) clearInterval(slot.statusTimer);
+  slot.statusIndex = 0;
+  slot.statusTimer = setInterval(() => {
+    slot.statusIndex = (slot.statusIndex + 1) % LOADING_MESSAGES[mode].length;
+    if ((mode === 'step1' && state.phase === 'quick-loading') || (mode === 'step2' && state.phase === 'final-loading')) {
+      renderCurrent(true);
+    }
+  }, 1400);
+}
+
+function stopLoadingTicker(mode) {
+  const slot = state.ai[mode];
+  if (!slot) return;
+  if (slot.statusTimer) clearInterval(slot.statusTimer);
+  slot.statusTimer = null;
+}
+
+function renderLoadingScreen(mode) {
+  const slot = state.ai[mode] || {};
+  const title = mode === 'step1' ? 'กำลังสรุปผลเบื้องต้น' : 'กำลังวิเคราะห์เชิงลึก';
+  const sub = mode === 'step1'
+    ? 'ขอเวลาแป๊บเดียว เรากำลังอ่านคำตอบของร้านคุณ แล้วสรุปภาพรวมที่ควรเริ่มก่อนให้ค่ะ'
+    : 'ขอเวลาอีกนิด เรากำลังจัดลำดับ pain หลัก แล้วเขียนแผน 30 วันที่ตรงกับร้านคุณให้ค่ะ';
+  const status = LOADING_MESSAGES[mode][slot.statusIndex || 0] || '';
+  el.stageCard.innerHTML = `
+    <div class="loading-wave">
+      <div class="loading-wave-card">
+        <div class="loading-wave-title">${title}</div>
+        <div class="loading-wave-sub">${sub}</div>
+        <div class="dots"><span></span><span></span><span></span></div>
+        <div class="loading-status">${status}</div>
+        <div class="loading-status-note">ระบบจะพาไปหน้าผลลัพธ์อัตโนมัติเมื่อวิเคราะห์เสร็จ</div>
+      </div>
+    </div>
+  `;
 }
 
 function profileComplete() {
@@ -2420,8 +2518,10 @@ function renderQuickQuestion() {
     if (!state.quickAnswers[q.id]) return;
     if (state.current === QUICK_QUESTIONS.length - 1) {
       state.quickType = inferQuickType();
-      state.phase = 'quick-result';
+      state.phase = 'quick-loading';
+      ensureAIAnalysis('step1');
       renderCurrent();
+      scrollStageTop();
     } else {
       state.current += 1;
       renderCurrent();
@@ -2876,9 +2976,16 @@ async function callAIAnalysis(payload) {
     body: JSON.stringify(payload)
   });
 
-  const data = await res.json().catch(() => ({}));
+  const raw = await res.text();
+  let data = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch (err) {
+    data = { error: raw || 'Invalid API response' };
+  }
+
   if (!res.ok) {
-    throw new Error(data.error || 'Analyze failed');
+    throw new Error(data.error || `Analyze failed (${res.status})`);
   }
   return data.text || '';
 }
@@ -2889,6 +2996,10 @@ function ensureAIAnalysis(mode = 'step1') {
   slot.requested = true;
   slot.loading = true;
   slot.error = '';
+  slot.text = '';
+  slot.statusIndex = 0;
+  startLoadingTicker(mode);
+
   const payload = {
     shopProfile: buildShopProfile(),
     quickAnswers: serializeQuickAnswers(),
@@ -2899,14 +3010,20 @@ function ensureAIAnalysis(mode = 'step1') {
 
   callAIAnalysis(payload)
     .then((text) => {
+      stopLoadingTicker(mode);
       slot.text = text;
       slot.loading = false;
+      if (mode === 'step1' && state.phase === 'quick-loading') state.phase = 'quick-result';
+      if (mode === 'step2' && state.phase === 'final-loading') state.phase = 'final-preview';
       renderCurrent(true);
     })
     .catch((err) => {
       console.error(`${mode} AI error:`, err);
+      stopLoadingTicker(mode);
       slot.error = err.message || 'Analyze failed';
       slot.loading = false;
+      if (mode === 'step1' && state.phase === 'quick-loading') state.phase = 'quick-result';
+      if (mode === 'step2' && state.phase === 'final-loading') state.phase = 'final-preview';
       renderCurrent(true);
     });
 }
@@ -2957,6 +3074,7 @@ function buildQuickResult() {
   const priorities = buildPriorities(label, false);
   const targetAdvice = getTargetAdvice();
   const arch = getArchetype();
+  const { strongest, weakest } = getStrongestWeakestSections();
   const promoFirst = label === 'price' && (state.quickAnswers.q5?.val || 0) >= 0.5 && (state.quickAnswers.q6?.val || 0) < 0.5;
 
   const title = {
@@ -2997,8 +3115,8 @@ function buildQuickResult() {
 
   return {
     type:label,
-    strongest:null,
-    weakest:null,
+    strongest,
+    weakest,
     total:getQuickScore(),
     summary,
     title,
@@ -3014,7 +3132,6 @@ function renderQuickResult() {
   const result = buildQuickResult();
   state.quickType = result.type;
   const firstMove = result.priorities[0];
-  ensureAIAnalysis('step1');
   el.stageCard.innerHTML = `
     <div class="result-card">
       <div class="result-top">
@@ -3402,7 +3519,8 @@ function renderEmailCollect() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) return;
     state.email = emailVal;
     state.name = nameVal;
-    state.phase = 'final-preview';
+    state.phase = 'final-loading';
+    ensureAIAnalysis('step2');
     renderCurrent();
     scrollStageTop();
   });
@@ -3583,7 +3701,6 @@ function build30DayPlan(type, deep) {
 function renderFinalPreview() {
   const quick = buildQuickResult();
   const final = buildFinalPreview();
-  ensureAIAnalysis('step2');
   const plan = build30DayPlan(final.label, state.deepAnswers);
   const emailNote = state.email
     ? `<div class="email-sent-box" style="margin-top:0; margin-bottom:18px;">✅ รายงานฉบับเต็มส่งไปที่ <strong>${escapeHTML(state.email)}</strong> แล้วค่ะ — เช็ก inbox ได้เลย</div>`
@@ -3703,6 +3820,8 @@ function renderQuickSectionBars(secScores) {
 
 
 function restartAll() {
+  stopLoadingTicker('step1');
+  stopLoadingTicker('step2');
   state.phase = 'setup';
   state.current = 0;
   state.quickAnswers = {};
@@ -3712,6 +3831,10 @@ function restartAll() {
   state.name = '';
   state.paymentMethod = 'promptpay';
   state.profile = { shopName:'', shopCat:'', heroProduct:'', monthlyOrders:'', targetOrders:'', mainProblem:'' };
+  state.ai = {
+    step1:{ requested:false, loading:false, text:'', error:'', statusIndex:0, statusTimer:null },
+    step2:{ requested:false, loading:false, text:'', error:'', statusIndex:0, statusTimer:null }
+  };
   document.body.classList.remove('result-active');
   renderCurrent();
   scrollStageTop();

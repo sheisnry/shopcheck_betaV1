@@ -3586,8 +3586,6 @@ function showLoadingWithMessages(msgs) {
   return timer;
 }
 
-/* Override renderQuickResult — keep original template, replace content with Claude */
-const _origRenderQuickResult = renderQuickResult;
 function normalizeSectionTitle(title = '') {
   return String(title)
     .replace(/\s+/g, ' ')
@@ -3662,9 +3660,7 @@ function parseAISections(rawText = '') {
       continue;
     }
 
-    if (
-      title.includes('แผน 30 วัน')
-    ) {
+    if (title.includes('แผน 30 วัน')) {
       result.plan30 = body;
       continue;
     }
@@ -3685,6 +3681,9 @@ function parseAISections(rawText = '') {
 
   return result;
 }
+
+/* Override renderQuickResult — keep original template, replace content with Claude */
+const _origRenderQuickResult = renderQuickResult;
 renderQuickResult = async function() {
   const loadingTimer = showLoadingWithMessages([
     `กำลังอ่านข้อมูลร้าน ${state.profile.shopName || ''}...`,
@@ -3703,50 +3702,11 @@ renderQuickResult = async function() {
     window._sc_step1_raw = aiText;  /* DEBUG: check in console */
     console.log('=== STEP1 RAW ===', aiText);
 
-    /* Pre-process: normalize dividers */
-    const normalizedText = aiText.replace(/\n---+\n/g, '\n');
-    const parseText = normalizedText;
-
-    /* Parse sections from Claude response */
     const parsed = parseAISections(aiText);
-	const overview = parsed.overview;
-	const strengths = parsed.strengths;
-	const weaknesses = parsed.weaknesses;
-	const actionPlan = parsed.actionPlan;
-    for (let i=1; i<parts.length; i+=2) {
-      const title = parts[i].trim();
-      const body = (parts[i+1]||'').trim();
-      if (title.includes('ภาพรวม')) overview = body;
-      else if (title.includes('จุดเด่น') || title.includes('รักษาไว้') || title.includes('ทำได้ดี')) strengths = body;
-      else if (title.includes('แก้ก่อน') || title.includes('ควรปรับ') || title.includes('จุดที่') || title.includes('ต้องแก้') || title.includes('ปรับก่อน')) {
-        /* Check if action plan leaked into weakness body — extract it */
-        const apMarker = body.indexOf('**Action plan');
-        const apMarker2 = body.indexOf('=== จบ section');
-        const cutAt = apMarker >= 0 ? apMarker : (apMarker2 >= 0 ? apMarker2 : -1);
-        if (cutAt >= 0) {
-          weaknesses = body.substring(0, cutAt).trim();
-          /* Extract leaked action plan text */
-          const leaked = body.substring(cutAt).replace(/\*\*Action plan[^*]*\*\*/g,'').replace(/=== จบ section[^\n]*/g,'').trim();
-          if (leaked && !actionPlan) actionPlan = leaked;
-        } else {
-          weaknesses = body;
-        }
-      }
-      else if (title.includes('Action') || title.includes('action') || title.includes('ทำได้เลย') || title.includes('ทำก่อน') || title.includes('สัปดาห์นี้')) actionPlan = body;
-      else if (!overview && i===1) overview = body;
-    }
-    /* Fallback */
-    if (!overview && !weaknesses && !actionPlan) {
-      overview = aiText.substring(0, 400);
-    }
-    /* If weaknesses parsed but empty body — search raw text for numbered items */
-    if (!weaknesses && aiText) {
-      const wIdx = aiText.search(/จุดที่.{0,10}แก้|จุดที่.{0,10}ปรับ|ควรปรับ|ต้องแก้/);
-      const aIdx = aiText.search(/Action plan|ทำก่อน|สัปดาห์นี้/);
-      if (wIdx >= 0) {
-        weaknesses = (aIdx > wIdx ? aiText.substring(wIdx, aIdx) : aiText.substring(wIdx)).trim();
-      }
-    }
+    const overview = parsed.overview;
+    const strengths = parsed.strengths;
+    const weaknesses = parsed.weaknesses;
+    const actionPlan = parsed.actionPlan;
 
     /* Build strength bullets */
     const strengthLines = strengths.split('\n').filter(l=>l.trim().startsWith('•')||l.trim().startsWith('-')).map(l=>l.replace(/^[•\-]\s*/,'')).filter(Boolean);
@@ -3887,23 +3847,9 @@ renderFinalPreview = async function() {
     console.log('=== STEP2 RAW ===', aiText);
 
     const parsed = parseAISections(aiText);
-	const actionPlan = parsed.deepActions || parsed.actionPlan;
-	const plan30 = parsed.plan30;
-	const channelFit = parsed.channelFit || parsed.overview;
-    for (let i=1; i<parts.length; i+=2) {
-      const title = parts[i].trim();
-      const body = (parts[i+1]||'').trim();
-      if (title.includes('Action') || title.includes('action') || title.includes('โฟกัส') || title.includes('ต้องทำ') || title.match(/^3/)) actionPlan = body;
-      else if (title.includes('แผน') || title.includes('30 วัน') || title.includes('สัปดาห์')) plan30 = body;
-      else if (title.includes('Channel') || title.includes('channel') || title.includes('Shopee') || title.includes('ควรโต')) channelFit = body;
-    }
-    /* Fallback: distribute remaining text if sections empty */
-    if (!actionPlan && !plan30 && !channelFit && aiText.length > 100) {
-      const thirds = Math.floor(aiText.length / 3);
-      actionPlan = aiText.substring(0, thirds);
-      plan30 = aiText.substring(thirds, thirds*2);
-      channelFit = aiText.substring(thirds*2);
-    }
+    const actionPlan = parsed.deepActions || parsed.actionPlan;
+    const plan30 = parsed.plan30;
+    const channelFit = parsed.channelFit || parsed.overview;
 
     /* Parse action steps */
     function parseActions(text) {
@@ -3950,11 +3896,7 @@ renderFinalPreview = async function() {
         ${emailNote}
 
         ${state._step1AI ? (() => {
-          const s1parts = state._step1AI.split(/\*\*([^*]+)\*\*/g);
-          let s1overview = '';
-          for (let i=1; i<s1parts.length; i+=2) {
-            if (s1parts[i].includes('ภาพรวม')) { s1overview = (s1parts[i+1]||'').trim(); break; }
-          }
+          const s1overview = parseAISections(state._step1AI).overview;
           return s1overview ? `<div style="background:var(--surface-muted);border-left:3px solid var(--brand);border-radius:var(--r-md);padding:16px 18px;margin-bottom:18px;"><div style="font-size:11px;font-weight:700;color:var(--brand);letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;">ภาพรวมร้านจากรอบแรก</div><p style="font-size:14px;line-height:1.75;color:var(--text);">${escapeHTML(s1overview)}</p></div>` : '';
         })() : ''}
 

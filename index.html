@@ -3708,8 +3708,11 @@ renderQuickResult = async function() {
     const parseText = normalizedText;
 
     /* Parse sections from Claude response */
-    const parts = parseText.split(/\*\*([^*]+)\*\*/g);
-    let overview='', strengths='', weaknesses='', actionPlan='';
+    const parsed = parseAISections(aiText);
+	const overview = parsed.overview;
+	const strengths = parsed.strengths;
+	const weaknesses = parsed.weaknesses;
+	const actionPlan = parsed.actionPlan;
     for (let i=1; i<parts.length; i+=2) {
       const title = parts[i].trim();
       const body = (parts[i+1]||'').trim();
@@ -3883,8 +3886,10 @@ renderFinalPreview = async function() {
     window._sc_step2_raw = aiText;  /* DEBUG */
     console.log('=== STEP2 RAW ===', aiText);
 
-    const parts = aiText.split(/\*\*([^*]+)\*\*/g);
-    let actionPlan='', plan30='', channelFit='';
+    const parsed = parseAISections(aiText);
+	const actionPlan = parsed.deepActions || parsed.actionPlan;
+	const plan30 = parsed.plan30;
+	const channelFit = parsed.channelFit || parsed.overview;
     for (let i=1; i<parts.length; i+=2) {
       const title = parts[i].trim();
       const body = (parts[i+1]||'').trim();

@@ -3588,6 +3588,103 @@ function showLoadingWithMessages(msgs) {
 
 /* Override renderQuickResult — keep original template, replace content with Claude */
 const _origRenderQuickResult = renderQuickResult;
+function normalizeSectionTitle(title = '') {
+  return String(title)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function parseAISections(rawText = '') {
+  const text = String(rawText || '').trim();
+
+  const result = {
+    overview: '',
+    strengths: '',
+    weaknesses: '',
+    actionPlan: '',
+    deepActions: '',
+    plan30: '',
+    channelFit: ''
+  };
+
+  if (!text) return result;
+
+  const parts = text.split(/\*\*([^*]+)\*\*/g);
+
+  for (let i = 1; i < parts.length; i += 2) {
+    const title = normalizeSectionTitle(parts[i]);
+    const body = (parts[i + 1] || '').trim();
+
+    if (
+      title.includes('ภาพรวมร้าน') ||
+      title.includes('ภาพรวมตอนนี้') ||
+      title.includes('ภาพรวมจากข้อมูลเชิงลึก')
+    ) {
+      result.overview = body;
+      continue;
+    }
+
+    if (
+      title.includes('จุดเด่นของร้าน') ||
+      title.includes('จุดที่ร้านทำได้ดี') ||
+      title.includes('ต้องรักษาไว้')
+    ) {
+      result.strengths = body;
+      continue;
+    }
+
+    if (
+      title.includes('จุดที่ควรปรับก่อน') ||
+      title.includes('จุดที่ต้องแก้ก่อน') ||
+      title.includes('จุดที่ต้องแก้') ||
+      title.includes('จุดที่ควรแก้')
+    ) {
+      result.weaknesses = body;
+      continue;
+    }
+
+    if (
+      title.includes('action plan 1 ข้อ') ||
+      title.includes('ทำได้เลยสัปดาห์นี้') ||
+      title.includes('ทำก่อนเลยสัปดาห์นี้')
+    ) {
+      result.actionPlan = body;
+      continue;
+    }
+
+    if (
+      title.includes('3 action plan') ||
+      title.includes('3 เรื่องที่ควรโฟกัสก่อน') ||
+      title.includes('action plan หลัก')
+    ) {
+      result.deepActions = body;
+      continue;
+    }
+
+    if (
+      title.includes('แผน 30 วัน')
+    ) {
+      result.plan30 = body;
+      continue;
+    }
+
+    if (
+      title.includes('channel fit') ||
+      title.includes('ควรโตบน shopee แบบไหน')
+    ) {
+      result.channelFit = body;
+      continue;
+    }
+  }
+
+  if (!result.overview && text) {
+    const firstChunk = text.split(/\n{2,}/)[0];
+    result.overview = firstChunk;
+  }
+
+  return result;
+}
 renderQuickResult = async function() {
   const loadingTimer = showLoadingWithMessages([
     `กำลังอ่านข้อมูลร้าน ${state.profile.shopName || ''}...`,

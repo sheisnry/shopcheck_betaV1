@@ -1226,6 +1226,36 @@ body.result-active .main-stage {
   color:var(--text3);
   font-size:12px;
 }
+.ai-output {
+  display:grid;
+  gap:12px;
+}
+.ai-heading {
+  font-size:18px;
+  font-weight:800;
+  color:var(--brand);
+  line-height:1.45;
+}
+.ai-paragraph {
+  font-size:14px;
+  line-height:1.82;
+  color:var(--text);
+}
+.ai-list {
+  margin:0;
+  padding-left:18px;
+  display:grid;
+  gap:8px;
+}
+.ai-list li {
+  font-size:14px;
+  line-height:1.82;
+  color:var(--text);
+}
+.ai-strong {
+  font-weight:800;
+  color:var(--brand-dark);
+}
 @keyframes dotPulse {
   0%,100% { opacity:.26; transform:scale(.7); }
   50% { opacity:1; transform:scale(1); }
@@ -2570,12 +2600,12 @@ function getTargetAdvice() {
   if (targetMax > nowInfo.max) {
     return {
       realistic:false,
-      text:`เป้าที่ตั้งไว้ยังไกลเกินสำหรับ 30 วันแรก รอบนี้ขอพาให้ถึง ${nowInfo.text} ก่อน แล้วค่อยขยับรอบถัดไป`
+      text:`เป้าที่ตั้งไว้ค่อนข้างไกลสำหรับ 30 วันแรกค่ะ ถ้าดูจากฐานตอนนี้ แนะนำให้โฟกัสเป้าช่วง ${nowInfo.text} ก่อน จะมีโอกาสไปถึงได้จริงกว่า แล้วค่อยขยับรอบถัดไป`
     };
   }
   return {
     realistic:true,
-    text:'เป้าที่ตั้งไว้ยังอยู่ในช่วงที่พอไล่ได้ ถ้าทำตามลำดับและไม่กระจายแรงเกินไป'
+    text:'เป้าที่ตั้งไว้ยังอยู่ในช่วงที่พอไล่ได้ค่ะ ถ้าทำตามลำดับและไม่กระจายโฟกัสเกินไป'
   };
 }
 
@@ -2764,7 +2794,7 @@ function buildPriorities(label, deepMode = false) {
       },
       {
         title:'พอหน้าร้านพร้อมแล้ว ค่อยเติมเครื่องมือเพิ่มการมองเห็น',
-        detail:'ค่อยเลือกใช้คูปอง แคมเปญ หรือโฆษณากับสินค้าที่หน้าสินค้าพร้อมแล้วก่อน',
+        detail:'ค่อยเลือกใช้คูปอง แคมเปญ หรือโฆษณากับสินค้าที่หน้าสินค้าพร้อมแล้วก่อน เช่น ตัวที่รูปพร้อม รายละเอียดครบ และเริ่มมีคนกดดูอยู่แล้ว จะได้ไม่เสียงบกับสินค้าที่ลูกค้ายังไม่มั่นใจ',
         why:'จะได้ไม่พาคนเข้ามาเพิ่มทั้งที่หน้าร้านยังไม่พร้อมปิดยอด'
       }
     ];
@@ -2875,11 +2905,57 @@ function escapeAIHTML(str) {
     .replace(/'/g, '&#39;');
 }
 
+function formatInlineBold(text) {
+  return text.replace(/\*\*(.*?)\*\*/g, '<span class="ai-strong">$1</span>');
+}
+
+function normalizeAIText(text) {
+  return String(text || '')
+    .replace(/\r/g, '')
+    .replace(/\t/g, ' ')
+    .replace(/[ ]{2,}/g, ' ')
+    .replace(/\bแรง\b/g, 'ชัด')
+    .replace(/secondary label/gi, 'หัวข้อย่อย')
+    .replace(/algorithm/gi, 'ระบบวิเคราะห์')
+    .replace(/ชนะเรื่องความชัดเจน/g, 'สื่อจุดขายอื่นให้ชัด')
+    .replace(/มองว่า/g, 'คิดว่า')
+    .trim();
+}
+
 function formatAIText(text) {
-  const safe = escapeAIHTML(text || '');
-  return safe
-    .replace(/\n\n+/g, '</p><p>')
-    .replace(/\n/g, '<br>');
+  const normalized = normalizeAIText(text);
+  const lines = normalized.split(/\n+/).map(line => line.trim()).filter(Boolean);
+  const blocks = [];
+  let listItems = [];
+
+  const flushList = () => {
+    if (!listItems.length) return;
+    blocks.push(`<ul class="ai-list">${listItems.join('')}</ul>`);
+    listItems = [];
+  };
+
+  lines.forEach((line) => {
+    const escaped = escapeAIHTML(line);
+    const numbered = line.match(/^(\d+)[.)]\s*(.+)$/);
+    const bullet = line.match(/^[-•]\s*(.+)$/);
+
+    if (numbered) {
+      flushList();
+      blocks.push(`<div class="ai-heading">${numbered[1]}. ${formatInlineBold(escapeAIHTML(numbered[2]))}</div>`);
+      return;
+    }
+
+    if (bullet) {
+      listItems.push(`<li>${formatInlineBold(escapeAIHTML(bullet[1]))}</li>`);
+      return;
+    }
+
+    flushList();
+    blocks.push(`<p class="ai-paragraph">${formatInlineBold(escaped)}</p>`);
+  });
+
+  flushList();
+  return `<div class="ai-output">${blocks.join('')}</div>`;
 }
 
 function serializeQuickAnswers() {
@@ -3059,7 +3135,7 @@ function renderAISection(mode, title) {
       <div class="text-block">
         <h3>${title}</h3>
         <div class="result-panel" style="background:white;">
-          <p style="white-space:normal;">${formatAIText(slot.text)}</p>
+          ${formatAIText(slot.text)}
         </div>
       </div>
     `;
@@ -3662,7 +3738,7 @@ function build30DayPlan(type, deep) {
       {
         week:'สัปดาห์ที่ 4',
         title:'เก็บข้อมูลทั้งเดือนมาดู แล้วตัดสินใจว่าควรขยับต่อแบบไหน',
-        detail:'ดูว่าสินค้าตัวไหนช่วยทำยอดได้จริง แล้วค่อยขยายต่อ ส่วนตัวที่ยังไปยากให้ปรับข้อเสนอหรือบทบาทของสินค้า ไม่ต้องฝืนดันทุกรายการ'
+        detail:'ดูว่าสินค้าตัวไหนช่วยทำยอดได้จริง แล้วค่อยขยายต่อ ส่วนตัวที่ยังไปยากให้ปรับข้อเสนอหรือบทบาทของสินค้า ไม่ต้องฝืนดันทุกรายการ และถ้ามี social media ให้โพสต์โปรพร้อมแปะลิงก์ร้านในช่วงเดียวกันด้วย'
       }
     ],
     ops: [

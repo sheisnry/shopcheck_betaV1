@@ -4,6 +4,49 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+function extractTextFromResponse(response) {
+  if (response?.output_text && String(response.output_text).trim()) {
+    return String(response.output_text).trim();
+  }
+
+  if (Array.isArray(response?.output)) {
+    const text = response.output
+      .flatMap((item) => {
+        if (!Array.isArray(item?.content)) return [];
+        return item.content.map((contentItem) => {
+          if (typeof contentItem?.text === "string") return contentItem.text;
+          return "";
+        });
+      })
+      .join("\n")
+      .trim();
+
+    if (text) return text;
+  }
+
+  return "";
+}
+
+function cleanupText(text) {
+  return String(text || "")
+    .replace(/\bกี้\b/g, "กี่")
+    .replace(/ปรับ listing/gi, "พัฒนารูปภาพสินค้า")
+    .replace(/listing/gi, "หน้าสินค้า")
+    .replace(
+      /รายละเอียดต้องชนะเรื่องความชัดเจน/g,
+      "ต้องเน้นจุดขายให้ชัด เช่น สินค้าตรงปก ผ้าหนานุ่ม ไม่บาง และทำให้เห็นชัดในภาพกับรายละเอียดสินค้า"
+    )
+    .replace(
+      /ปั้มโปรโมชันให้ต่อเนื่อง/g,
+      "เริ่มใช้เครื่องมือใน Marketing Center พวก Flash Sale, Voucher หรือ Bundle Deal"
+    )
+    .replace(/ไม่มีแรงกดดัน/g, "ลูกค้าไม่มีแรงจูงใจพอที่จะกดซื้อทันที")
+    .replace(/มีแรงกลับมาซื้อ/g, "มีโอกาสกลับมาซื้อ")
+    .replace(/แรงจูงใจแรง/g, "แรงจูงใจชัดขึ้น")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -29,7 +72,8 @@ export default async function handler(req, res) {
   }
 
   const finalPrompt =
-    prompt || `Analyze this Shopee store with score ${score || 0}/${total || 0}:\n${answers || ""}`;
+    prompt ||
+    `Analyze this Shopee store with score ${score || 0}/${total || 0}:\n${answers || ""}`;
 
   const instructions = `
 คุณคือ Niranya ที่ปรึกษา e-commerce ที่เชี่ยวชาญ Shopee สำหรับร้านเล็กถึงกลาง
@@ -80,39 +124,28 @@ Priority ของคำแนะนำเชิงลึก:
 - คำแนะนำต้องทำต่อได้เลย
 `;
 
-  function cleanupText(text) {
-    return String(text || "")
-      .replace(/\bกี้\b/g, "กี่")
-      .replace(/ปรับ listing/gi, "พัฒนารูปภาพสินค้า")
-      .replace(/listing/gi, "หน้าสินค้า")
-      .replace(
-        /รายละเอียดต้องชนะเรื่องความชัดเจน/g,
-        "ต้องเน้นจุดขายให้ชัด เช่น สินค้าตรงปก ผ้าหนานุ่ม ไม่บาง และทำให้เห็นชัดในภาพกับรายละเอียดสินค้า"
-      )
-      .replace(
-        /ปั้มโปรโมชันให้ต่อเนื่อง/g,
-        "เริ่มใช้เครื่องมือใน Marketing Center พวก Flash Sale, Voucher หรือ Bundle Deal"
-      )
-      .replace(/ไม่มีแรงกดดัน/g, "ลูกค้าไม่มีแรงจูงใจพอที่จะกดซื้อทันที")
-      .replace(/มีแรงกลับมาซื้อ/g, "มีโอกาสกลับมาซื้อ")
-      .replace(/แรงจูงใจแรง/g, "แรงจูงใจชัดขึ้น")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-  }
-
   try {
     const response = await client.responses.create({
       model: process.env.OPENAI_MODEL || "gpt-5",
+      reasoning: { effort: "low" },
       instructions,
       input: finalPrompt,
       max_output_tokens: 2400,
       store: false,
     });
 
-    const text = cleanupText(response.output_text || "");
+    const rawText = extractTextFromResponse(response);
+    const text = cleanupText(rawText);
 
     if (!text) {
-      return res.status(500).json({ error: "OpenAI returned empty text" });
+      return res.status(500).json({
+        error: "OpenAI returned empty text",
+        debug: {
+          has_output_text: !!response?.output_text,
+          output_length: Array.isArray(response?.output) ? response.output.length : 0,
+          status: response?.status || null
+        }
+      });
     }
 
     return res.status(200).json({ result: text });

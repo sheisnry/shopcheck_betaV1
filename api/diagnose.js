@@ -1,29 +1,35 @@
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+import OpenAI from "openai";
 
-  if (req.method === 'OPTIONS') {
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+
+  if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    return res.status(500).json({ error: 'Missing OPENAI_API_KEY' });
+    return res.status(500).json({ error: "Missing OPENAI_API_KEY" });
   }
 
   const { prompt, answers, score, total } = req.body || {};
 
   if (!prompt && !answers) {
-    return res.status(400).json({ error: 'Missing prompt or answers' });
+    return res.status(400).json({ error: "Missing prompt or answers" });
   }
 
   const finalPrompt =
-    prompt || `Analyze this Shopee store with score ${score || 0}/${total || 0}:\n${answers || ''}`;
+    prompt || `Analyze this Shopee store with score ${score || 0}/${total || 0}:\n${answers || ""}`;
 
   const instructions = `
 คุณคือ Niranya ที่ปรึกษา e-commerce ที่เชี่ยวชาญ Shopee สำหรับร้านเล็กถึงกลาง
@@ -75,78 +81,44 @@ Priority ของคำแนะนำเชิงลึก:
 `;
 
   function cleanupText(text) {
-    return String(text || '')
-      .replace(/\bกี้\b/g, 'กี่')
-      .replace(/ปรับ listing/gi, 'พัฒนารูปภาพสินค้า')
-      .replace(/listing/gi, 'หน้าสินค้า')
+    return String(text || "")
+      .replace(/\bกี้\b/g, "กี่")
+      .replace(/ปรับ listing/gi, "พัฒนารูปภาพสินค้า")
+      .replace(/listing/gi, "หน้าสินค้า")
       .replace(
         /รายละเอียดต้องชนะเรื่องความชัดเจน/g,
-        'ต้องเน้นจุดขายให้ชัด เช่น สินค้าตรงปก ผ้าหนานุ่ม ไม่บาง และทำให้เห็นชัดในภาพกับรายละเอียดสินค้า'
+        "ต้องเน้นจุดขายให้ชัด เช่น สินค้าตรงปก ผ้าหนานุ่ม ไม่บาง และทำให้เห็นชัดในภาพกับรายละเอียดสินค้า"
       )
       .replace(
         /ปั้มโปรโมชันให้ต่อเนื่อง/g,
-        'เริ่มใช้เครื่องมือใน Marketing Center พวก Flash Sale, Voucher หรือ Bundle Deal'
+        "เริ่มใช้เครื่องมือใน Marketing Center พวก Flash Sale, Voucher หรือ Bundle Deal"
       )
-      .replace(/ไม่มีแรงกดดัน/g, 'ลูกค้าไม่มีแรงจูงใจพอที่จะกดซื้อทันที')
-      .replace(/มีแรงกลับมาซื้อ/g, 'มีโอกาสกลับมาซื้อ')
-      .replace(/แรงจูงใจแรง/g, 'แรงจูงใจชัดขึ้น')
-      .replace(/\n{3,}/g, '\n\n')
+      .replace(/ไม่มีแรงกดดัน/g, "ลูกค้าไม่มีแรงจูงใจพอที่จะกดซื้อทันที")
+      .replace(/มีแรงกลับมาซื้อ/g, "มีโอกาสกลับมาซื้อ")
+      .replace(/แรงจูงใจแรง/g, "แรงจูงใจชัดขึ้น")
+      .replace(/\n{3,}/g, "\n\n")
       .trim();
   }
 
   try {
-    const response = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || 'gpt-5',
-        instructions,
-        input: finalPrompt,
-        max_output_tokens: 2400,
-        store: false
-      })
+    const response = await client.responses.create({
+      model: process.env.OPENAI_MODEL || "gpt-5",
+      instructions,
+      input: finalPrompt,
+      max_output_tokens: 2400,
+      store: false,
     });
 
-    const raw = await response.text();
-
-    let data = {};
-    try {
-      data = JSON.parse(raw);
-    } catch (e) {
-      return res.status(500).json({
-        error: `OpenAI returned non-JSON response: ${raw.slice(0, 300)}`
-      });
-    }
-
-    if (!response.ok) {
-      return res.status(500).json({
-        error: data?.error?.message || `OpenAI request failed with status ${response.status}`
-      });
-    }
-
-    let text = data?.output_text || '';
-
-    if (!text && Array.isArray(data?.output)) {
-      text = data.output
-        .flatMap(item => item?.content || [])
-        .map(c => c?.text || '')
-        .join('\n')
-        .trim();
-    }
+    const text = cleanupText(response.output_text || "");
 
     if (!text) {
-      return res.status(500).json({ error: 'OpenAI returned empty text' });
+      return res.status(500).json({ error: "OpenAI returned empty text" });
     }
-
-    text = cleanupText(text);
 
     return res.status(200).json({ result: text });
   } catch (err) {
     return res.status(500).json({
-      error: err?.message || 'Unknown server error'
+      error: err?.message || "Unknown server error",
     });
   }
 }

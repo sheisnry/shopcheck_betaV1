@@ -3385,22 +3385,27 @@ function escapeAttr(str) { return escapeHTML(str); }
 async function callClaude(prompt) {
   const res = await fetch('/api/diagnose', {
     method: 'POST',
-    headers: {'Content-Type':'application/json'},
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt, score: 0, total: 0, answers: '' })
   });
 
+  const raw = await res.text();
+
   let data = {};
   try {
-    data = await res.json();
+    data = JSON.parse(raw);
   } catch (e) {
-    throw new Error('ระบบวิเคราะห์ตอบกลับไม่สมบูรณ์');
+    throw new Error(raw || 'API ไม่ได้ส่ง JSON กลับมา');
   }
 
   if (!res.ok) {
-    throw new Error(data.error || 'เรียก AI ไม่สำเร็จ');
+    throw new Error(data.error || `HTTP ${res.status}`);
   }
 
-  if (data.error) throw new Error(data.error);
+  if (data.error) {
+    throw new Error(data.error);
+  }
+
   return data.result || '';
 }
 

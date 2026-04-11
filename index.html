@@ -2778,11 +2778,8 @@ function escapeAIHTML(str) {
 function formatAIText(text) {
   const safe = escapeAIHTML(text || '');
   return safe
-    .replace(/
-
-+/g, '</p><p>')
-    .replace(/
-/g, '<br>');
+    .replace(/\n\n+/g, '</p><p>')
+    .replace(/\n/g, '<br>');
 }
 
 function serializeQuickAnswers() {

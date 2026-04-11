@@ -1,104 +1,139 @@
-import OpenAI from "openai";
-
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    return res.status(500).json({ error: "OPENAI_API_KEY is missing" });
+    return res.status(500).json({ error: 'Missing OPENAI_API_KEY' });
+  }
+
+  const { prompt, answers, score, total } = req.body || {};
+  if (!prompt && !answers) {
+    return res.status(400).json({ error: 'Missing prompt or answers' });
+  }
+
+  const finalPrompt =
+    prompt || `Analyze this Shopee store with score ${score || 0}/${total || 0}:\n${answers || ''}`;
+
+  const systemPrompt = `
+คุณคือ Niranya ที่ปรึกษา e-commerce ที่เชี่ยวชาญ Shopee สำหรับร้านเล็กถึงกลาง
+หน้าที่ของคุณคือเขียนคำวิเคราะห์ให้ “อ่านเหมือนคนจริง” ไม่ใช่ภาษา AI
+
+กฎสำคัญเรื่องภาษา:
+- พูดตรง อบอุ่น เป็นกันเอง ใช้ "ค่ะ" ตามธรรมชาติ
+- ห้ามใช้คำว่า "พี่" หรือ "น้อง"
+- ห้ามใช้คำว่า "แรง" เพื่ออธิบายพฤติกรรมลูกค้า
+  ให้ใช้ "ยังไม่ตัดสินใจซื้อ", "ยังลังเลอยู่", "ยังไม่มีแรงจูงใจพอที่จะกดซื้อทันที"
+- ห้ามใช้คำว่า "กี้" ให้ใช้ "กี่"
+- ห้ามใช้คำว่า "ปรับ listing"
+  ให้ใช้ "พัฒนารูปภาพสินค้า", "ปรับหน้าสินค้าให้น่าสนใจขึ้น", "เก็บรายละเอียดหน้าสินค้า"
+- ห้ามใช้ประโยคแบบ AI เช่น
+  "รายละเอียดต้องชนะเรื่องความชัดเจน"
+  "พัฒนารูปภาพและเนื้อหาสินค้าให้ตอบโจทย์ราคาคุ้ม"
+  "เน้นให้เห็นว่าได้มากในราคาเดียวกัน"
+  "ปั้มโปรโมชันให้ต่อเนื่อง"
+- ถ้าพูดถึงโปร ให้ใช้ภาษาคน เช่น
+  "ลองเซตคูปองส่วนลด ทำ Flash Sale หรือโปร Bundle ซื้อ 2 ตัวลดเพิ่ม 20% วันเดิมทุกสัปดาห์"
+- ถ้าพูดถึง Ads ให้เปิดด้วย empathy ก่อน เช่น
+  "เข้าใจนะคะว่าเรื่อง Ads นี่อาจได้ยินมาอยู่แล้ว..."
+- ภาษาต้องเป็น consultant ที่รู้จริง แต่ไม่แข็ง ไม่เว่อร์ และไม่ใช้ jargon เกินจำเป็น
+
+กฎเรื่อง format:
+- ใช้ **ชื่อหัวข้อ** เท่านั้น
+- ห้ามใช้ ### หรือ --- เป็นหัวข้อ
+- ห้าม bold ข้อความกลางย่อหน้า ยกเว้นชื่อหัวข้อ
+- ถ้าเป็นวิธีทำ ให้ขึ้นบรรทัดใหม่ทีละขั้น
+- ถ้าเป็นแผน 30 วัน ต้องครบ 4 สัปดาห์เสมอ
+- ถ้ามี action plan ให้เขียน usable และเฉพาะเจาะจง ไม่ใช่คำแนะนำกว้าง ๆ
+
+กฎเรื่อง reasoning:
+- ถ้าราคาสู้ยาก ต้องเสนอ “จุดขายอื่น” ให้ชัด เช่น ตรงปก ผ้าหนานุ่ม รีวิวดี ผ่อนชำระได้ ความสบายใจหลังซื้อ
+- ถ้าเป้าออเดอร์ไกลเกินจริง ให้เตือนแบบสุภาพและให้ target ที่ realistic กว่า
+- ห้ามสรุปมั่วจากข้อมูลที่ไม่มี
+- ถ้าเป็นหมวดแฟชั่น อย่าพูดกว้าง ๆ ว่า “รูปไม่ดี” ให้ระบุปัญหาให้เห็นภาพ เช่น crop ผิด ไม่มีรูปใส่จริง เห็นแค่เพศเดียว ทั้งที่สินค้า unisex
+- ถ้าเป็นสินค้า unisex ให้ระวังการแนะนำภาพผู้ใช้ทั้งสองเพศ
+- ถ้าเป็นผู้หญิงล้วนหรือผู้ชายล้วน ห้ามแนะนำข้ามเพศมั่ว
+
+Priority ของคำแนะนำเชิงลึก:
+1. รูปสินค้า / content คุณภาพ
+2. โปรโมชันและเครื่องมือ Marketing Center
+3. Ads / traffic
+
+เป้าหมายของคุณคือ:
+- เขียนให้คนอ่านรู้สึกว่า “คนที่เข้าใจ Shopee จริงกำลังบอกฉัน”
+- คำแนะนำต้องทำต่อได้เลย
+`;
+
+  function cleanupText(text) {
+    return String(text || '')
+      .replace(/\bกี้\b/g, 'กี่')
+      .replace(/ปรับ listing/gi, 'พัฒนารูปภาพสินค้า')
+      .replace(/listing/gi, 'หน้าสินค้า')
+      .replace(/รายละเอียดต้องชนะเรื่องความชัดเจน/g, 'ต้องเน้นจุดขายให้ชัด เช่น สินค้าตรงปก ผ้าหนานุ่ม ไม่บาง และทำให้เห็นชัดในภาพกับรายละเอียดสินค้า')
+      .replace(/ปั้มโปรโมชันให้ต่อเนื่อง/g, 'เริ่มใช้เครื่องมือใน Marketing Center พวก Flash Sale, Voucher หรือ Bundle Deal')
+      .replace(/ไม่มีแรงกดดัน/g, 'ลูกค้าไม่มีแรงจูงใจพอที่จะกดซื้อทันที')
+      .replace(/มีแรงกลับมาซื้อ/g, 'มีโอกาสกลับมาซื้อ')
+      .replace(/แรงจูงใจแรง/g, 'แรงจูงใจชัดขึ้น')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
   }
 
   try {
-    const {
-      shopProfile = {},
-      quickAnswers = [],
-      deepAnswers = [],
-      diagnosisPacket = {},
-      mode = "step1",
-    } = req.body || {};
-
-    const systemPrompt = `
-คุณคือที่ปรึกษาที่เชี่ยวชาญการปั้นร้าน Shopee สำหรับร้านเล็กถึงกลาง
-
-หลักการเขียน:
-- เขียนภาษาไทยให้เป็นธรรมชาติ เหมือนคนที่ทำงานกับร้านค้ามาจริง
-- โทนตรง อบอุ่น อ่านง่าย ไม่แข็ง ไม่ขายฝัน
-- ห้ามใช้คำว่า “แรง”, “secondary label”, “algorithm”, “มองว่า”, “ชนะเรื่องความชัดเจน”
-- หลีกเลี่ยงคำฟังดูเป็น AI หรือภาษาระบบ
-- หลีกเลี่ยงประโยคกำกวม เช่น “รายละเอียดต้องชนะเรื่องความชัดเจน”
-- ถ้าร้านแพ้เรื่องราคา ต้องอธิบายให้ชัดว่าควรเน้นจุดขายอื่นอะไรแทน เช่น ตรงปก ผ้าดี รีวิวดี ผ่อนชำระได้ ความสบายใจหลังซื้อ
-- ถ้าพูดถึงโปรโมชัน ให้เขียนแบบใช้งานได้จริง เช่น คูปองร้าน, Flash Sale, Bundle Deal, โปรเฉพาะสินค้าที่อยากดัน
-- คำแนะนำทุกข้อควรตอบให้ครบ 4 ส่วนในย่อหน้าเดียว: ควรทำอะไร / ทำกับอะไร / เพราะอะไร / คาดหวังอะไร
-- ถ้าเป้าหมายไกลเกินจริงสำหรับ 30 วัน ให้เตือนอย่างสุภาพและให้เป้าช่วงที่ realistic กว่า
-- ห้ามเดาข้อมูลนอกเหนือจากข้อมูลที่ได้รับ
-- ใช้คำสะกดให้ถูก และอ่านลื่นแบบภาษาคน
-
-รูปแบบคำตอบ:
-- ใช้หัวข้อใหญ่ตามที่กำหนดเท่านั้น
-- แต่ละหัวข้อใหญ่ขึ้นต้นด้วยเลข 1. 2. 3. ตามลำดับ
-- ถ้าจำเป็นต้องมีข้อย่อย ให้ใช้ bullet สั้น ๆ
-- ไม่ต้องใช้ markdown table
-- ไม่ต้องใส่คำนำหรือสรุปท้ายเกินที่สั่ง
-`;
-
-    const userPrompt = `
-ข้อมูลร้าน:
-${JSON.stringify(shopProfile, null, 2)}
-
-คำตอบรอบแรก:
-${JSON.stringify(quickAnswers, null, 2)}
-
-คำตอบรอบลึก:
-${JSON.stringify(deepAnswers, null, 2)}
-
-สรุปจาก logic engine:
-${JSON.stringify(diagnosisPacket, null, 2)}
-
-โหมด:
-${mode}
-
-ถ้า mode = "step1" ให้ตอบเป็นหัวข้อ:
-1. ภาพรวมด้านความพร้อมของร้าน
-2. จุดที่ร้านทำได้ดี
-3. จุดหลักลำดับแรกที่ทำให้ยอดไม่มา
-
-ข้อกำหนดเพิ่มสำหรับ step1:
-- แต่ละหัวข้อให้ยาว 2-4 ประโยค
-- หัวข้อ 2 ต้องยกจุดดีที่มีอยู่จริงจากข้อมูลร้าน
-- หัวข้อ 3 ต้องบอก pain หลักให้ชัด และพูดแบบคนอ่านเข้าใจทันที
-
-ถ้า mode = "step2" ให้ตอบเป็นหัวข้อ:
-1. ภาพรวมตอนนี้ร้านควรโตบน Shopee แบบไหน
-2. แกนปัญหาหลักของร้าน
-3. สิ่งที่ยังพอเป็นแรงจูงใจให้ลูกค้าซื้อได้อยู่
-4. 3 เรื่องที่ควรโฟกัสก่อน
-5. แผน 30 วัน
-
-ข้อกำหนดเพิ่มสำหรับ step2:
-- หัวข้อ 4 ให้แยกเป็น 3 ข้อย่อย และแต่ละข้อควรใช้งานได้จริง ไม่สั้นเกินไป
-- หัวข้อ 5 ให้แบ่งเป็นสัปดาห์ที่ 1 ถึง 4
-- ถ้าพูดถึงโปรโมชัน ให้ยกตัวอย่างแบบร้านค้าเอาไปทำต่อได้เลย
-- ถ้าสินค้าอยู่ในตลาดที่แข่งราคาหนัก ให้พูดเรื่องการสื่อจุดขายอื่นให้ชัดด้วย
-`;
-
-    const response = await client.responses.create({
-      model: "gpt-5",
-      input: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-5',
+        input: [
+          {
+            role: 'system',
+            content: [{ type: 'input_text', text: systemPrompt }]
+          },
+          {
+            role: 'user',
+            content: [{ type: 'input_text', text: finalPrompt }]
+          }
+        ]
+      })
     });
 
-    return res.status(200).json({ text: response.output_text || "" });
-  } catch (error) {
-    console.error("OpenAI analyze error:", error);
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      const apiError =
+        data?.error?.message ||
+        data?.message ||
+        `OpenAI request failed with status ${response.status}`;
+      return res.status(500).json({ error: apiError });
+    }
+
+    let text = data?.output_text || '';
+
+    if (!text && Array.isArray(data?.output)) {
+      text = data.output
+        .flatMap((item) => item?.content || [])
+        .map((c) => c?.text || '')
+        .join('\n')
+        .trim();
+    }
+
+    text = cleanupText(text);
+
+    return res.status(200).json({ result: text });
+  } catch (err) {
     return res.status(500).json({
-      error: error?.message || "Analyze failed",
+      error: err?.message || 'Unknown server error'
     });
   }
 }

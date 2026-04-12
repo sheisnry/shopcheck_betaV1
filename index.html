@@ -198,10 +198,6 @@ button, input, select { font:inherit; }
   box-shadow:0 12px 26px rgba(234,90,24,.28);
   animation:ctaPulse 2.4s ease-in-out infinite;
 }
-@keyframes waveJump {
-  0%, 100% { transform: translateY(0); opacity: 0.4; }
-  50% { transform: translateY(-8px); opacity: 1; }
-}
 @keyframes ctaPulse {
   0%,100% { box-shadow:0 12px 26px rgba(234,90,24,.22); }
   50% { box-shadow:0 16px 34px rgba(234,90,24,.35); }
@@ -1189,6 +1185,77 @@ body.result-active .main-stage {
 }
 .dots span:nth-child(2) { animation-delay:.18s; }
 .dots span:nth-child(3) { animation-delay:.36s; }
+.loading-wave {
+  min-height:380px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  padding:28px 16px;
+}
+.loading-wave-card {
+  width:min(100%, 560px);
+  background:white;
+  border:1px solid var(--border);
+  border-radius:28px;
+  padding:34px 24px;
+  box-shadow:var(--shadow-sm);
+}
+.loading-wave-title {
+  font-family:'DM Serif Display',serif;
+  font-size:34px;
+  line-height:1.08;
+  margin-bottom:12px;
+}
+.loading-wave-sub {
+  color:var(--text2);
+  font-size:14px;
+  line-height:1.8;
+  max-width:420px;
+  margin:0 auto 22px;
+}
+.loading-status {
+  margin-top:18px;
+  font-size:15px;
+  font-weight:700;
+  color:var(--brand-dark);
+  min-height:24px;
+}
+.loading-status-note {
+  margin-top:8px;
+  color:var(--text3);
+  font-size:12px;
+}
+.ai-output {
+  display:grid;
+  gap:12px;
+}
+.ai-heading {
+  font-size:18px;
+  font-weight:800;
+  color:var(--brand);
+  line-height:1.45;
+}
+.ai-paragraph {
+  font-size:14px;
+  line-height:1.82;
+  color:var(--text);
+}
+.ai-list {
+  margin:0;
+  padding-left:18px;
+  display:grid;
+  gap:8px;
+}
+.ai-list li {
+  font-size:14px;
+  line-height:1.82;
+  color:var(--text);
+}
+.ai-strong {
+  font-weight:800;
+  color:var(--brand-dark);
+}
 @keyframes dotPulse {
   0%,100% { opacity:.26; transform:scale(.7); }
   50% { opacity:1; transform:scale(1); }
@@ -1726,11 +1793,11 @@ body.result-active .main-stage {
   padding:14px 16px;
 }
 .plan-week-label {
-  font-size:13px;
+  font-size:11px;
   font-weight:700;
   color:var(--brand);
   text-transform:uppercase;
-  letter-spacing:.3px;
+  letter-spacing:.5px;
   margin-bottom:6px;
 }
 .plan-week-title {
@@ -1740,9 +1807,9 @@ body.result-active .main-stage {
   margin-bottom:4px;
 }
 .plan-week-detail {
-  font-size:14px;
+  font-size:12px;
   color:var(--text2);
-  line-height:1.8;
+  line-height:1.6;
 }
 .result-highlight {
   font-size:15px;
@@ -2038,7 +2105,24 @@ const state = {
   quickType:null,
   paymentMethod:'promptpay',
   email:'',
-  name:''
+  name:'',
+  ai:{
+    step1:{ requested:false, loading:false, text:'', error:'', statusIndex:0, statusTimer:null },
+    step2:{ requested:false, loading:false, text:'', error:'', statusIndex:0, statusTimer:null }
+  }
+};
+
+const LOADING_MESSAGES = {
+  step1:[
+    'กำลังวิเคราะห์ร้าน',
+    'กำลังวิเคราะห์จุดอ่อน',
+    'กำลังสรุปภาพรวมเบื้องต้น'
+  ],
+  step2:[
+    'กำลังวิเคราะห์ร้านเชิงลึก',
+    'กำลังวิเคราะห์จุดอ่อนสำคัญ',
+    'กำลังทำแผน 30 วัน'
+  ]
 };
 
 const el = {
@@ -2061,6 +2145,10 @@ function startFlow() {
   state.started = true;
   state.phase = 'setup';
   state.current = 0;
+  state.ai = {
+    step1:{ requested:false, loading:false, text:'', error:'', statusIndex:0, statusTimer:null },
+    step2:{ requested:false, loading:false, text:'', error:'', statusIndex:0, statusTimer:null }
+  };
   document.body.classList.add('flow-active');
   document.body.classList.remove('result-active');
   el.flowWrap.classList.remove('hidden');
@@ -2138,8 +2226,10 @@ function updateHUD() {
 
   if (state.phase === 'setup') el.stepPill.textContent = 'Step 0 · ตั้งค่าร้าน';
   if (state.phase === 'quick-question') el.stepPill.textContent = `เช็กเบื้องต้น ${state.current + 1}/${QUICK_QUESTIONS.length}`;
+  if (state.phase === 'quick-loading') el.stepPill.textContent = 'กำลังวิเคราะห์ผลเบื้องต้น';
   if (state.phase === 'quick-result') el.stepPill.textContent = 'ผลเบื้องต้น · เลือกทางโตที่เหมาะกับร้าน';
   if (state.phase === 'deep-question') el.stepPill.textContent = `คำถามต่อยอด ${state.current + 1}/${getDeepQuestions().length}`;
+  if (state.phase === 'final-loading') el.stepPill.textContent = 'กำลังวิเคราะห์เชิงลึก';
   if (state.phase === 'final-preview') el.stepPill.textContent = 'ภาพรวม · ถ้าดูต่อจะโฟกัสอะไร';
 
   renderSectionChart();
@@ -2199,7 +2289,7 @@ function animateStage(renderFn) {
 
 function renderCurrent(skipAnim = false) {
   updateHUD();
-  const resultMode = state.phase === 'quick-result' || state.phase === 'final-preview';
+  const resultMode = ['quick-loading','quick-result','final-loading','final-preview'].includes(state.phase);
   el.flowShell.classList.toggle('result-mode', resultMode);
   document.body.classList.toggle('result-active', state.phase === 'final-preview');
   if (skipAnim) doRenderCurrent(); else animateStage(doRenderCurrent);
@@ -2208,12 +2298,54 @@ function renderCurrent(skipAnim = false) {
 function doRenderCurrent() {
   if (state.phase === 'setup') return renderProfileStep();
   if (state.phase === 'quick-question') return renderQuickQuestion();
+  if (state.phase === 'quick-loading') return renderLoadingScreen('step1');
   if (state.phase === 'quick-result') return renderQuickResult();
   if (state.phase === 'payment') return renderPayment();
   if (state.phase === 'deep-question') return renderDeepQuestion();
   if (state.phase === 'email-collect') return renderEmailCollect();
   if (state.phase === 'email-sent') return renderEmailSent();
+  if (state.phase === 'final-loading') return renderLoadingScreen('step2');
   return renderFinalPreview();
+}
+
+function startLoadingTicker(mode) {
+  const slot = state.ai[mode];
+  if (!slot) return;
+  if (slot.statusTimer) clearInterval(slot.statusTimer);
+  slot.statusIndex = 0;
+  slot.statusTimer = setInterval(() => {
+    slot.statusIndex = (slot.statusIndex + 1) % LOADING_MESSAGES[mode].length;
+    if ((mode === 'step1' && state.phase === 'quick-loading') || (mode === 'step2' && state.phase === 'final-loading')) {
+      renderCurrent(true);
+    }
+  }, 1400);
+}
+
+function stopLoadingTicker(mode) {
+  const slot = state.ai[mode];
+  if (!slot) return;
+  if (slot.statusTimer) clearInterval(slot.statusTimer);
+  slot.statusTimer = null;
+}
+
+function renderLoadingScreen(mode) {
+  const slot = state.ai[mode] || {};
+  const title = mode === 'step1' ? 'กำลังสรุปผลเบื้องต้น' : 'กำลังวิเคราะห์เชิงลึก';
+  const sub = mode === 'step1'
+    ? 'ขอเวลาแป๊บเดียว เรากำลังอ่านคำตอบของร้านคุณ แล้วสรุปภาพรวมที่ควรเริ่มก่อนให้ค่ะ'
+    : 'ขอเวลาอีกนิด เรากำลังจัดลำดับ pain หลัก แล้วเขียนแผน 30 วันที่ตรงกับร้านคุณให้ค่ะ';
+  const status = LOADING_MESSAGES[mode][slot.statusIndex || 0] || '';
+  el.stageCard.innerHTML = `
+    <div class="loading-wave">
+      <div class="loading-wave-card">
+        <div class="loading-wave-title">${title}</div>
+        <div class="loading-wave-sub">${sub}</div>
+        <div class="dots"><span></span><span></span><span></span></div>
+        <div class="loading-status">${status}</div>
+        <div class="loading-status-note">ระบบจะพาไปหน้าผลลัพธ์อัตโนมัติเมื่อวิเคราะห์เสร็จ</div>
+      </div>
+    </div>
+  `;
 }
 
 function profileComplete() {
@@ -2416,8 +2548,10 @@ function renderQuickQuestion() {
     if (!state.quickAnswers[q.id]) return;
     if (state.current === QUICK_QUESTIONS.length - 1) {
       state.quickType = inferQuickType();
-      state.phase = 'quick-result';
+      state.phase = 'quick-loading';
+      ensureAIAnalysis('step1');
       renderCurrent();
+      scrollStageTop();
     } else {
       state.current += 1;
       renderCurrent();
@@ -2466,12 +2600,12 @@ function getTargetAdvice() {
   if (targetMax > nowInfo.max) {
     return {
       realistic:false,
-      text:`เป้าที่ตั้งไว้ยังไกลเกินสำหรับ 30 วันแรก รอบนี้ขอพาให้ถึง ${nowInfo.text} ก่อน แล้วค่อยขยับรอบถัดไป`
+      text:`เป้าที่ตั้งไว้ค่อนข้างไกลสำหรับ 30 วันแรกค่ะ ถ้าดูจากฐานตอนนี้ แนะนำให้โฟกัสเป้าช่วง ${nowInfo.text} ก่อน จะมีโอกาสไปถึงได้จริงกว่า แล้วค่อยขยับรอบถัดไป`
     };
   }
   return {
     realistic:true,
-    text:'เป้าที่ตั้งไว้ยังอยู่ในช่วงที่พอไล่ได้ ถ้าทำตามลำดับและไม่กระจายแรงเกินไป'
+    text:'เป้าที่ตั้งไว้ยังอยู่ในช่วงที่พอไล่ได้ค่ะ ถ้าทำตามลำดับและไม่กระจายโฟกัสเกินไป'
   };
 }
 
@@ -2576,19 +2710,43 @@ function buildStrengthBulletsFromState() {
   const arr = [];
   const d5 = getDeepCodes('d5');
   const d3 = getDeepCodes('d3');
-  if ((state.quickAnswers.q7?.val || 0) >= 0.5) arr.push('จากที่ตอบเรตติ้งดี แปลว่าร้านมีความน่าเชื่อถือ ลูกค้าพอใจกับสินค้า ข้อนี้เป็นจุดแข็งที่เอาไปปั้นร้านโตต่อได้ค่ะ');
-  if (d5.includes('finance')) arr.push('ยังมีลูกค้าบางกลุ่มที่พร้อมซื้อผ่าน Shopee เพราะมองหาโค้ดส่วนลด หรือการผ่อนอย่าง SpayLater อยู่ค่ะ แบบนี้แปลว่าช่องทางนี้ยังมีโอกาสโตได้');
-  if (d5.includes('safe') || d5.includes('trust_reason')) arr.push('ถ้าลูกค้าได้ลองดูสินค้าแล้ว ยังมีโอกาสปิดการขายได้อยู่ ถ้าร้านทำให้เขารู้สึกสบายใจและเชื่อถือมากขึ้นค่ะ');
-  if (d3.some(c => ['voucher','bundle','flash','campaign'].includes(c))) arr.push('ร้านเริ่มใช้เครื่องมือช่วยขายอยู่แล้ว ถือว่าเป็นฐานที่เอาไปต่อยอดได้ ไม่ต้องเริ่มจากศูนย์ค่ะ');
-  if ((state.quickAnswers.q1?.val || 0) === 1) arr.push('หน้าร้านและหมวดหมู่สินค้าเริ่มมีโครงที่ดีแล้ว ถ้าเก็บต่ออีกนิด ลูกค้าจะหาของง่ายขึ้นค่ะ');
-  if ((state.quickAnswers.q8?.val || 0) === 1) arr.push('ระบบร้านยังพอรับยอดได้อยู่ ถ้าเก็บให้สม่ำเสมอขึ้นอีกนิด จะช่วยให้ร้านโตได้สบายขึ้นค่ะ');
-  if (!arr.length) arr.push('ร้านยังมีพื้นฐานบางอย่างให้ต่อยอดได้ค่ะ ขอแค่เลือกแก้ให้ตรงจุดก่อน ไม่ต้องรื้อทุกอย่างพร้อมกัน');
+  const arch = getArchetype();
+
+  if ((state.quickAnswers.q7?.val || 0) >= 0.5) {
+    arr.push('จากที่ตอบเรตติ้งดี แปลว่าร้านมีความน่าเชื่อถือ ลูกค้าพอใจกับสินค้า ข้อนี้เป็นจุดแข็งที่เอาไปปั้นร้านโตต่อได้ค่ะ');
+  }
+  if (d5.includes('finance')) {
+    arr.push('ยังมีลูกค้าบางกลุ่มที่พร้อมซื้อผ่าน Shopee เพราะมองหาโค้ดส่วนลด หรือการผ่อนอย่าง SpayLater อยู่ค่ะ แบบนี้แปลว่าช่องทางนี้ยังมีโอกาสโตได้');
+  }
+  if (d5.includes('safe') || d5.includes('trust_reason')) {
+    arr.push('ร้านยังพอมีจุดที่ทำให้ลูกค้ารู้สึกสบายใจได้อยู่ ถ้าเก็บหน้าสินค้าให้ชัดขึ้นอีกนิด โอกาสปิดยอดยังมีค่ะ');
+  }
+  if (d3.some(c => ['voucher','bundle','flash','campaign'].includes(c))) {
+    arr.push('ร้านเริ่มใช้เครื่องมือช่วยขายอยู่แล้ว ถือว่าเป็นฐานที่เอาไปต่อยอดได้ ไม่ต้องเริ่มจากศูนย์ค่ะ');
+  }
+  if ((state.quickAnswers.q1?.val || 0) === 1) {
+    arr.push('หน้าร้านและหมวดหมู่สินค้าเริ่มมีโครงที่ดีแล้ว ถ้าเก็บต่ออีกนิด ลูกค้าจะหาของง่ายขึ้นค่ะ');
+  }
+  if ((state.quickAnswers.q8?.val || 0) === 1) {
+    arr.push('ระบบร้านยังพอรับยอดได้อยู่ ถ้าเก็บให้สม่ำเสมอขึ้นอีกนิด จะช่วยให้ร้านโตได้สบายขึ้นค่ะ');
+  }
+  if (arch.visualRequired && (state.quickAnswers.q2?.val || 0) >= 0.5) {
+    arr.push('สินค้าหมวดนี้ใช้รูปและหน้าปกช่วยขายได้เยอะ ถ้าร้านเริ่มทำได้ดีอยู่แล้ว ก็มีแต้มต่อในการปั้นยอดค่ะ');
+  }
+  if (arch.comparePriceHigh && (state.quickAnswers.q4?.val || 0) >= 0.5) {
+    arr.push('สินค้ากลุ่มนี้ลูกค้ามักดูข้อมูลก่อนซื้อ ถ้าร้านอธิบายสภาพและรายละเอียดได้ดีอยู่แล้ว ถือว่าเป็นฐานที่ดีมากค่ะ');
+  }
+
+  if (!arr.length) {
+    arr.push('ร้านยังมีพื้นฐานบางอย่างให้ต่อยอดได้ค่ะ ขอแค่เลือกแก้ให้ตรงจุดก่อน ไม่ต้องรื้อทุกอย่างพร้อมกัน');
+  }
   return arr.slice(0, 3);
 }
 
 function buildPriorities(label, deepMode = false) {
   const hero = state.profile.heroProduct || 'สินค้าหลัก';
   const cat = state.profile.shopCat || 'หมวดนี้';
+  const arch = getArchetype();
   const d4 = state.deepAnswers.d4?.code || '';
   const d5 = getDeepCodes('d5');
   const singleChannel = d5.includes('single_channel');
@@ -2596,12 +2754,38 @@ function buildPriorities(label, deepMode = false) {
   const quickPromoLow = (state.quickAnswers.q6?.val || 0) < 0.5;
   const promoFirst = ((!deepMode && quickPriceOk && quickPromoLow) || ['promo_never','promo_some','promo_unsure'].includes(d4));
 
+  const trafficFocus = arch.comparePriceHigh
+    ? 'เก็บชื่อสินค้า รุ่น สเปก สภาพ และหมวดหมู่ให้ชัด'
+    : arch.visualRequired
+      ? 'เก็บรูปปก ชื่อสินค้า และหมวดหมู่ให้คนเห็นแล้วอยากกด'
+      : 'เก็บชื่อสินค้า หมวดหมู่ และหน้าร้านให้ดูง่ายก่อน';
+
+  const trustFocus = arch.comparePriceHigh || arch.educationNeedHigh
+    ? 'สภาพสินค้า จุดตำหนิ ประกัน สิ่งที่ได้หลังซื้อ และข้อมูลที่ลูกค้ามักถาม'
+    : arch.visualRequired
+      ? 'รูปปก รีวิว โทนภาพ และรายละเอียดที่ช่วยให้ลูกค้านึกภาพออก'
+      : 'รีวิว รายละเอียดสินค้า และจุดเด่นที่ทำให้ลูกค้าตัดสินใจง่ายขึ้น';
+
+  const promoIdea = arch.bundlePotential
+    ? 'คูปองร้านหรือ Bundle Deal'
+    : arch.comparePriceHigh
+      ? 'คูปองร้าน หรือของแถมเล็ก ๆ ที่ไม่กระทบต้นทุนมาก'
+      : 'คูปองร้าน Bundle Deal หรือ Flash Sale';
+
+  const valueIdea = arch.comparePriceHigh
+    ? 'ผ่อนได้ ของแถมเล็ก ๆ ประกันร้าน หรือเช็กสภาพก่อนส่ง'
+    : arch.visualRequired
+      ? 'โปรคู่กัน ของแถมเล็ก ๆ หรือข้อความที่ทำให้เห็นชัดว่าซื้อแล้วคุ้มขึ้น'
+      : arch.bundlePotential
+        ? 'การจัดเซต ซื้อหลายชิ้นคุ้มกว่า หรือคูปองขั้นต่ำ'
+        : 'ของแถมเล็ก ๆ หรือข้อเสนอที่ทำให้ลูกค้ารู้สึกว่าซื้อแล้วคุ้มขึ้น';
+
   if (label === 'traffic') {
     return [
       {
-        title:'โฟกัสเรื่องการตกแต่งหน้าร้านและจัดหมวดหมู่สินค้าให้ชัดก่อน',
-        detail:'ทำแบนเนอร์ จัดหมวดหมู่สินค้า และเก็บรายละเอียดหน้าสินค้าให้ดูง่ายก่อน เพื่อให้คนที่เจอร้านแล้วอยากกดดูต่อ',
-        why:'ตอนนี้ร้านมีโอกาสให้ลูกค้าเจอสินค้าแล้ว แต่หน้าร้านยังไม่ช่วยพาเขาไปต่อได้ดีพอ'
+        title:'โฟกัสเรื่องหน้าร้านและการทำให้ลูกค้าอยากกดเข้ามาดูต่อก่อน',
+        detail:`เริ่มจาก ${trafficFocus} และทำแบนเนอร์/จัดหมวดหมู่สินค้าให้ชัด เพื่อให้คนที่เจอร้านแล้วไปต่อได้ง่ายขึ้น`,
+        why:'ตอนนี้ร้านมีโอกาสให้ลูกค้าเจอสินค้าแล้ว แต่หน้าร้านและหน้าสินค้ายังไม่ช่วยพาเขาไปต่อได้ดีพอ'
       },
       {
         title:'เลือก 3 สินค้าหลักที่อยากปั้นก่อน จะได้ไม่เหนื่อยมากเกินไป',
@@ -2610,20 +2794,21 @@ function buildPriorities(label, deepMode = false) {
       },
       {
         title:'พอหน้าร้านพร้อมแล้ว ค่อยเติมเครื่องมือเพิ่มการมองเห็น',
-        detail:'ค่อยเลือกใช้คูปอง แคมเปญ หรือโฆษณากับสินค้าที่หน้าสินค้าพร้อมแล้วก่อน',
+        detail:'ค่อยเลือกใช้คูปอง แคมเปญ หรือโฆษณากับสินค้าที่หน้าสินค้าพร้อมแล้วก่อน เช่น ตัวที่รูปพร้อม รายละเอียดครบ และเริ่มมีคนกดดูอยู่แล้ว จะได้ไม่เสียงบกับสินค้าที่ลูกค้ายังไม่มั่นใจ',
         why:'จะได้ไม่พาคนเข้ามาเพิ่มทั้งที่หน้าร้านยังไม่พร้อมปิดยอด'
       }
     ];
   }
+
   if (label === 'trust') {
     const first = d4 === 'promo_not_work'
       ? {
           title:'กลับมาเก็บหน้าสินค้าหลักให้น่าเชื่อถือขึ้นก่อน',
-          detail:`ถ้า ${hero} เคยทำโปรแล้วแต่ยอดยังไม่มา แปลว่าปัญหาไม่ได้อยู่ที่ส่วนลดอย่างเดียว ลูกค้ายังต้องการความมั่นใจเพิ่ม`,
+          detail:`ถ้า ${hero} เคยทำโปรแล้วแต่ยอดยังไม่มา แปลว่าปัญหาไม่ได้อยู่ที่ส่วนลดอย่างเดียว ลูกค้ายังต้องการความมั่นใจเพิ่ม โดยเฉพาะเรื่อง ${trustFocus}`,
           why:'โปรช่วยดึงความสนใจได้ แต่ถ้าหน้าสินค้ายังไม่พาให้มั่นใจ ลูกค้าก็ยังไม่ซื้อค่ะ'
         }
       : {
-          title:`โฟกัสรูปปก รีวิว และคำอธิบายของ ${hero} ให้ครบก่อน`,
+          title:`โฟกัส ${trustFocus} ของ ${hero} ให้ครบก่อน`,
           detail:'เติมข้อมูลที่ลูกค้ามักถาม และทำให้เห็นชัดว่าสินค้าดียังไง เหมาะกับใคร ใช้งานแบบไหน',
           why:'ถ้าลูกค้ายังไม่มั่นใจพอ ต่อให้เข้ามาดูแล้วก็ยังไม่กดซื้อ'
         };
@@ -2631,7 +2816,7 @@ function buildPriorities(label, deepMode = false) {
       first,
       {
         title:'เพิ่มหลักฐานที่ช่วยให้ลูกค้าตัดสินใจง่ายขึ้น',
-        detail:'เช่น รีวิวพร้อมรูป วิดีโอสั้น หรือข้อมูลที่ลูกค้ามักถามบ่อย เพื่อให้หน้าสินค้าช่วยตอบแทนแชทได้มากขึ้น',
+        detail:'เช่น รีวิวพร้อมรูป วิดีโอสั้น ข้อมูลสเปก/ไซซ์/วิธีใช้ หรือสิ่งที่ช่วยให้ลูกค้ารู้สึกสบายใจก่อนซื้อ',
         why:'ยิ่งลูกค้ารู้สึกสบายใจมากขึ้น โอกาสปิดยอดก็ยิ่งดีขึ้น'
       },
       {
@@ -2641,32 +2826,34 @@ function buildPriorities(label, deepMode = false) {
       }
     ];
   }
+
   if (label === 'price') {
     const first = promoFirst
       ? {
-          title:'ลองทำโปรกับสินค้าที่ลูกค้าเห็นเยอะก่อน',
-          detail:`เริ่มจาก ${hero} ที่อยากดันก่อน ลองคูปองร้าน Bundle Deal หรือ Flash Sale กับสินค้านี้ก่อน ไม่ต้องทำทั้งร้าน`,
-          why:'จากที่ตอบมา ราคาเดี่ยวของสินค้าน่าจะยังพอสู้ได้อยู่ แต่ร้านยังไม่ได้ส่งแรงจูงใจเพิ่มให้ลูกค้า'
+          title:'ลองเพิ่มแรงจูงใจให้ซื้อกับสินค้าที่คนเห็นเยอะก่อน',
+          detail:`เริ่มจาก ${hero} ที่อยากดันก่อน ลองใช้ ${promoIdea} กับสินค้านี้ก่อน ยังไม่ต้องทำทั้งร้าน`,
+          why:'จากที่ตอบมา ราคาเดี่ยวของสินค้าน่าจะยังพอสู้ได้อยู่ แต่ร้านยังไม่ได้เพิ่มแรงจูงใจให้ลูกค้าตัดสินใจซื้อเร็วขึ้น'
         }
       : {
           title:'ทำให้ลูกค้าเห็นชัดว่าซื้อกับร้านนี้แล้วได้อะไรเพิ่ม',
-          detail:`ถ้า ${hero} ราคาสูงกว่าร้านอื่น ลองดันจุดที่ทำให้ลูกค้ารู้สึกคุ้มขึ้น เช่น ผ่อนได้ ของแถมเล็ก ๆ ประกันร้าน หรือความสบายใจหลังซื้อ`,
+          detail:`ถ้า ${hero} ราคาสูงกว่าร้านอื่น ลองดันจุดที่ทำให้ลูกค้ารู้สึกว่าคุ้มขึ้น เช่น ${valueIdea}`,
           why:'ลูกค้ามักจะเทียบราคาก่อน ถ้าร้านยังไม่มีเหตุผลที่มากพอให้ซื้อผ่าน Shopee ลูกค้าก็มีโอกาสไปดูร้านอื่นต่อ'
         };
     return [
       first,
       {
-        title:'หยิบจุดต่างขึ้นไปไว้บนรูปปกและหน้าสินค้าทันที',
-        detail:'ถ้าร้านมีผ่อนได้ มีของแถมเล็ก ๆ หรือมีจุดเด่นที่ช่วยให้ลูกค้ารู้สึกคุ้ม ให้ลูกค้าเห็นตั้งแต่แรกเลย',
+        title:'หยิบจุดที่ทำให้ลูกค้ารู้สึกคุ้มขึ้นไปไว้บนรูปปกและหน้าสินค้าทันที',
+        detail:`ถ้าร้านมี ${valueIdea} ให้ลูกค้าเห็นตั้งแต่แรก จะช่วยให้เขาตัดสินใจง่ายขึ้น และรู้สึกว่าซื้อกับร้านนี้แล้วคุ้มกว่า`,
         why:'ลูกค้าจะตัดสินใจง่ายขึ้น เมื่อเห็นทันทีว่าซื้อกับร้านนี้แล้วได้อะไรเพิ่ม'
       },
       {
-        title:'ถ้าร้านลดราคาเพิ่มไม่ได้ ให้เพิ่มความคุ้มในแบบที่ไม่กระทบต้นทุนมาก',
-        detail:'เช่น ของแถมเล็ก ๆ การจัดเซต หรือ Bundle Deal ที่ช่วยให้ลูกค้ารู้สึกว่าซื้อแล้วคุ้มขึ้น และยังเพิ่มยอดขายต่อออเดอร์ได้ด้วย',
-        why:'ถ้าร้านเล่นเรื่องราคาไม่ได้เต็มที่ ก็ยังทำให้ลูกค้ารู้สึกอยากซื้อได้จากข้อเสนอที่ชัดขึ้น'
+        title:'ดูข้อมูลจริงว่าลูกค้ายังลังเลตรงไหน แล้วแก้จากตรงนั้นต่อ',
+        detail:'ถ้าคนเข้ามาดูแล้วแต่ยังไม่ซื้อ ดูต่อว่าติดเรื่องราคา เรื่องโปร หรือหน้าสินค้ายังไม่ช่วยพอ จะได้ไม่แก้กระจายเกินไป',
+        why:'การใช้ข้อมูลจาก Seller Center จะช่วยให้รู้ว่าควรขยับต่อจุดไหนก่อน'
       }
     ];
   }
+
   if (label === 'ops') {
     return [
       {
@@ -2686,61 +2873,334 @@ function buildPriorities(label, deepMode = false) {
       }
     ];
   }
+
   return [
     {
-      title:'เช็กก่อนว่าสินค้าหลักตัวนี้ยังเหมาะจะดันบน Shopee ไหม',
+      title:'เช็กให้ชัดก่อนว่าสินค้าหลักตัวนี้ยังมีเหตุผลให้ลูกค้าซื้อผ่าน Shopee อยู่ไหม',
       detail:`สำหรับ ${hero} ในหมวด ${cat} ลูกค้ามักจะเทียบราคาก่อน ถ้าราคาต้องสูงขึ้นจากค่าธรรมเนียม ร้านต้องมีเหตุผลที่มากพอให้ลูกค้ายอมซื้อผ่าน Shopee`,
       why:'ถ้าไม่แยกให้ชัดก่อน ร้านอาจเหนื่อยเยอะ แต่ยอดยังไม่มาตามที่หวัง'
     },
     {
       title:'ถ้ายังพอขายผ่าน Shopee ได้ ให้ดันเหตุผลนั้นขึ้นมาให้ชัด',
-      detail:'เช่น โค้ดส่วนลด การผ่อนอย่าง SpayLater ความสบายใจหลังซื้อ รีวิว หรือของแถมเล็ก ๆ แล้วเอาขึ้นไปไว้ในรูปปกและหน้าสินค้า',
+      detail:`เช่น โค้ดส่วนลด การผ่อนอย่าง SpayLater ความสบายใจหลังซื้อ รีวิว หรือ ${valueIdea} แล้วเอาขึ้นไปไว้ในรูปปกและหน้าสินค้า`,
       why:'ลูกค้าจะไม่ได้ดูแค่ราคาอย่างเดียว ถ้าเห็นชัดว่าซื้อแบบนี้แล้วคุ้มในมุมของเขา'
     },
     {
-      title:'ถ้าปรับครบแล้วยังไปต่อยาก ค่อยดูว่าสินค้าตัวไหนใช้เดินยอดได้ง่ายกว่า',
-      detail: singleChannel ? 'ถ้าร้านขายบน Shopee ช่องทางเดียว ยิ่งควรแยกให้ชัดว่าตัวไหนใช้ทำยอด และตัวไหนใช้สร้างความน่าเชื่อถือ' : 'จะได้ไม่ผูกการโตทั้งร้านไว้กับสินค้าหลักตัวเดียวเร็วเกินไป',
+      title:'ใช้ข้อมูลจริงตัดสินว่าสินค้าตัวนี้ควรทำหน้าที่ไหนในร้าน',
+      detail: singleChannel
+        ? 'ถ้าร้านขายบน Shopee ช่องทางเดียว ยิ่งควรแยกให้ชัดว่าตัวไหนใช้ทำยอด และตัวไหนใช้ช่วยสร้างความน่าเชื่อถือ ไม่ต้องดันทุกตัวพร้อมกัน'
+        : 'ถ้าปรับครบแล้วยังไปต่อยาก ค่อยดูว่าสินค้าตัวนี้ควรใช้ทำยอด หรือใช้สร้างความน่าเชื่อถือของร้านมากกว่ากัน',
       why:'ค่อยใช้ข้อมูลจริงช่วยตัดสินใจ จะได้ไม่เปลี่ยนแผนทั้งร้านเร็วเกินไป'
     }
   ];
 }
 
+
+function escapeAIHTML(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatInlineBold(text) {
+  return text.replace(/\*\*(.*?)\*\*/g, '<span class="ai-strong">$1</span>');
+}
+
+function normalizeAIText(text) {
+  return String(text || '')
+    .replace(/\r/g, '')
+    .replace(/\t/g, ' ')
+    .replace(/[ ]{2,}/g, ' ')
+    .replace(/\bแรง\b/g, 'ชัด')
+    .replace(/secondary label/gi, 'หัวข้อย่อย')
+    .replace(/algorithm/gi, 'ระบบวิเคราะห์')
+    .replace(/ชนะเรื่องความชัดเจน/g, 'สื่อจุดขายอื่นให้ชัด')
+    .replace(/มองว่า/g, 'คิดว่า')
+    .trim();
+}
+
+function formatAIText(text) {
+  const normalized = normalizeAIText(text);
+  const lines = normalized.split(/\n+/).map(line => line.trim()).filter(Boolean);
+  const blocks = [];
+  let listItems = [];
+
+  const flushList = () => {
+    if (!listItems.length) return;
+    blocks.push(`<ul class="ai-list">${listItems.join('')}</ul>`);
+    listItems = [];
+  };
+
+  lines.forEach((line) => {
+    const escaped = escapeAIHTML(line);
+    const numbered = line.match(/^(\d+)[.)]\s*(.+)$/);
+    const bullet = line.match(/^[-•]\s*(.+)$/);
+
+    if (numbered) {
+      flushList();
+      blocks.push(`<div class="ai-heading">${numbered[1]}. ${formatInlineBold(escapeAIHTML(numbered[2]))}</div>`);
+      return;
+    }
+
+    if (bullet) {
+      listItems.push(`<li>${formatInlineBold(escapeAIHTML(bullet[1]))}</li>`);
+      return;
+    }
+
+    flushList();
+    blocks.push(`<p class="ai-paragraph">${formatInlineBold(escaped)}</p>`);
+  });
+
+  flushList();
+  return `<div class="ai-output">${blocks.join('')}</div>`;
+}
+
+function serializeQuickAnswers() {
+  return QUICK_QUESTIONS.map(q => {
+    const ans = state.quickAnswers[q.id];
+    return {
+      id: q.id,
+      question: q.title,
+      answer: ans ? ans.label : '',
+      note: ans ? ans.sub : '',
+      score: ans ? ans.val : null
+    };
+  });
+}
+
+function serializeDeepAnswers() {
+  return getDeepQuestions().map(q => {
+    const ans = state.deepAnswers[q.id];
+    if (!ans) return { id:q.id, question:q.title, answer:'', note:'' };
+    if (Array.isArray(ans)) {
+      return {
+        id:q.id,
+        question:q.title,
+        answer: ans.map(x => x.label).join(', '),
+        note: ans.map(x => x.sub).join(' | ')
+      };
+    }
+    return {
+      id:q.id,
+      question:q.title,
+      answer: ans.label,
+      note: ans.sub || ''
+    };
+  });
+}
+
+function buildDiagnosisPacket(mode = 'step1') {
+  const scores = scoreIssues();
+  const includeDeep = mode === 'step2';
+  const label = getCombinedLabel(scores, includeDeep);
+  const quick = buildQuickResult();
+  const sectionStats = getQuickSectionStats();
+  const targetAdvice = getTargetAdvice();
+  const packet = {
+    mode,
+    primaryLabel: getLabelHeadline(label),
+    primaryCode: label,
+    quickScore: formatScore(getQuickScore()),
+    quickVerdict: getQuickVerdict(),
+    quickPercent: getQuickPct(),
+    productArchetype: getArchetype(),
+    targetAdvice: targetAdvice ? targetAdvice.text : '',
+    sectionScores: sectionStats.map(sec => ({
+      section: sec.name,
+      score: formatScore(sec.score),
+      max: sec.max,
+      percent: sec.pct
+    })),
+    quickSummary: quick.summary,
+    firstPain: quick.pain,
+    strengths: buildStrengthBulletsFromState(),
+    firstPriority: quick.priorities?.[0] || null
+  };
+
+  if (mode === 'step2') {
+    const final = buildFinalPreview();
+    packet.deepSummary = {
+      role: final.role,
+      rootProblem: final.rootProblem,
+      motivations: final.strengths,
+      priorities: final.focus,
+      targetAdvice: final.targetAdvice ? final.targetAdvice.text : ''
+    };
+  }
+
+  return packet;
+}
+
+function buildShopProfile() {
+  return {
+    shopName: state.profile.shopName || '',
+    shopCat: state.profile.shopCat || '',
+    heroProduct: state.profile.heroProduct || '',
+    monthlyOrders: state.profile.monthlyOrders || '',
+    targetOrders: state.profile.targetOrders || '',
+    mainProblem: state.profile.mainProblem || ''
+  };
+}
+
+async function callAIAnalysis(payload) {
+  const res = await fetch('/api/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  const raw = await res.text();
+  let data = {};
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch (err) {
+    data = { error: raw || 'Invalid API response' };
+  }
+
+  if (!res.ok) {
+    throw new Error(data.error || `Analyze failed (${res.status})`);
+  }
+  return data.text || '';
+}
+
+function ensureAIAnalysis(mode = 'step1') {
+  const slot = state.ai[mode];
+  if (!slot || slot.requested || slot.loading) return;
+  slot.requested = true;
+  slot.loading = true;
+  slot.error = '';
+  slot.text = '';
+  slot.statusIndex = 0;
+  startLoadingTicker(mode);
+
+  const payload = {
+    shopProfile: buildShopProfile(),
+    quickAnswers: serializeQuickAnswers(),
+    deepAnswers: mode === 'step2' ? serializeDeepAnswers() : [],
+    diagnosisPacket: buildDiagnosisPacket(mode),
+    mode
+  };
+
+  callAIAnalysis(payload)
+    .then((text) => {
+      stopLoadingTicker(mode);
+      slot.text = text;
+      slot.loading = false;
+      if (mode === 'step1' && state.phase === 'quick-loading') state.phase = 'quick-result';
+      if (mode === 'step2' && state.phase === 'final-loading') state.phase = 'final-preview';
+      renderCurrent(true);
+    })
+    .catch((err) => {
+      console.error(`${mode} AI error:`, err);
+      stopLoadingTicker(mode);
+      slot.error = err.message || 'Analyze failed';
+      slot.loading = false;
+      if (mode === 'step1' && state.phase === 'quick-loading') state.phase = 'quick-result';
+      if (mode === 'step2' && state.phase === 'final-loading') state.phase = 'final-preview';
+      renderCurrent(true);
+    });
+}
+
+function renderAISection(mode, title) {
+  const slot = state.ai[mode];
+  if (!slot) return '';
+  if (slot.loading) {
+    return `
+      <div class="text-block">
+        <h3>${title}</h3>
+        <div class="loading-box" style="min-height:180px;">
+          <div>
+            <div class="dots"><span></span><span></span><span></span></div>
+            <div>กำลังให้ AI อ่านคำตอบและสรุปเป็นคำแนะนำเฉพาะร้านนี้ให้อยู่ค่ะ…</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  if (slot.error) {
+    return `
+      <div class="text-block">
+        <h3>${title}</h3>
+        <div class="result-panel">
+          <p>ตอนนี้เรียก AI ไม่สำเร็จค่ะ (${escapeHTML(slot.error)}) เลยยังแสดงเป็นผลจาก logic เดิมไปก่อนนะคะ</p>
+        </div>
+      </div>
+    `;
+  }
+  if (slot.text) {
+    return `
+      <div class="text-block">
+        <h3>${title}</h3>
+        <div class="result-panel" style="background:white;">
+          ${formatAIText(slot.text)}
+        </div>
+      </div>
+    `;
+  }
+  return '';
+}
+
 function buildQuickResult() {
-  const { strongest, weakest, stats } = getStrongestWeakestSections();
   const scores = scoreIssues();
   const label = getCombinedLabel(scores, false);
   state.quickType = label;
   const priorities = buildPriorities(label, false);
   const targetAdvice = getTargetAdvice();
+  const arch = getArchetype();
+  const { strongest, weakest } = getStrongestWeakestSections();
   const promoFirst = label === 'price' && (state.quickAnswers.q5?.val || 0) >= 0.5 && (state.quickAnswers.q6?.val || 0) < 0.5;
 
   const title = {
-    traffic:'โตได้ถ้าโฟกัสจริงจังเรื่องหน้าร้าน การจัดหมวดหมู่ และการทำให้ลูกค้าอยากกดเข้ามาดูต่อ',
+    traffic:'โตได้ค่ะ ถ้าโฟกัสหน้าร้านและการทำให้ลูกค้าอยากกดเข้ามาดูต่อ',
     trust:'โตได้ค่ะ ถ้าเก็บความน่าเชื่อถือของร้านและหน้าสินค้าให้แน่นขึ้น',
-    price: promoFirst ? 'โตได้ค่ะ ถ้าเริ่มใช้โปรกับสินค้าที่คนเห็นอยู่แล้วให้ถูกตัว' : 'โตได้ค่ะ ถ้าทำให้ลูกค้าเห็นว่าซื้อกับร้านนี้แล้วได้อะไรเพิ่ม',
+    price: promoFirst ? 'โตได้ค่ะ ถ้าเริ่มใช้โปรกับสินค้าที่คนเห็นอยู่แล้วให้ถูกตัว' : 'โตได้ค่ะ ถ้าทำให้ลูกค้าเห็นชัดว่าซื้อกับร้านนี้แล้วได้อะไรเพิ่ม',
     ops:'โตได้ค่ะ ถ้าเก็บระบบร้านให้พร้อมก่อน',
-    channel_fit:'โตได้ค่ะ แต่ควรเลือกให้ชัดก่อนว่าสินค้าหลักตัวนี้เหมาะจะดันบน Shopee แค่ไหน'
+    channel_fit:'โตได้ค่ะ แต่ควรเลือกให้ชัดก่อนว่าสินค้าหลักตัวนี้ควรดันบน Shopee ต่อแบบไหน'
   }[label];
 
   const summary = {
-    traffic:'จากที่ตอบมา สินค้ามีโอกาสได้รับการมองเห็นแล้ว แต่ร้านยังต้องเก็บหน้าร้านและหน้าสินค้าให้พาคนไปต่อได้ดีขึ้นอีกค่ะ',
-    trust:'จากที่ตอบมา ลูกค้าเริ่มเห็นสินค้าแล้ว แต่ยังต้องการความมั่นใจเพิ่มก่อนกดซื้อ โดยเฉพาะเรื่องรูป รีวิว และรายละเอียดสินค้า',
-    price: promoFirst ? 'จากที่ตอบมา ราคาเดี่ยวของสินค้าน่าจะยังพอสู้ได้อยู่ แต่ร้านยังไม่ได้ใช้โปรกับสินค้าที่คนเห็นอยู่จริง เลยทำให้ลูกค้ายังไม่มีเหตุผลเพิ่มที่จะกดซื้อ' : 'จากที่ตอบมา ลูกค้ามักจะเทียบราคาและข้อเสนอที่ได้ก่อน ร้านจึงต้องทำให้เห็นชัดว่าซื้อกับร้านนี้แล้วได้อะไรเพิ่ม',
+    traffic: arch.comparePriceHigh
+      ? 'จากที่ตอบมา สินค้ามีโอกาสได้รับการมองเห็นแล้ว แต่หน้าร้าน ชื่อสินค้า และรายละเอียดยังไม่ช่วยให้ลูกค้ากดเข้ามาดูต่อได้ดีพอ'
+      : 'จากที่ตอบมา สินค้ามีโอกาสได้รับการมองเห็นแล้ว แต่ร้านยังต้องเก็บหน้าร้านและหน้าสินค้าให้พาคนไปต่อได้ดีขึ้นอีกค่ะ',
+    trust: arch.comparePriceHigh || arch.educationNeedHigh
+      ? 'จากที่ตอบมา ลูกค้าเริ่มเห็นสินค้าแล้ว แต่ยังต้องการความมั่นใจเพิ่มก่อนกดซื้อ โดยเฉพาะเรื่องสภาพสินค้า รายละเอียด และความสบายใจหลังซื้อ'
+      : 'จากที่ตอบมา ลูกค้าเริ่มเห็นสินค้าแล้ว แต่ยังต้องการความมั่นใจเพิ่มก่อนกดซื้อ โดยเฉพาะเรื่องรูป รีวิว และรายละเอียดสินค้า',
+    price: promoFirst
+      ? 'จากที่ตอบมา ราคาเดี่ยวของสินค้าน่าจะยังพอสู้ได้อยู่ แต่ร้านยังไม่ได้ใช้โปรกับสินค้าที่คนเห็นอยู่จริง เลยทำให้ลูกค้ายังไม่มีเหตุผลเพิ่มที่จะกดซื้อ'
+      : 'จากที่ตอบมา ลูกค้ามักจะเทียบราคาและสิ่งที่ได้เพิ่มก่อนตัดสินใจ ร้านจึงต้องทำให้เห็นชัดว่าซื้อกับร้านนี้แล้วคุ้มตรงไหน',
     ops:'จากที่ตอบมา ปัญหาหลักตอนนี้อยู่ที่ความพร้อมของร้าน ทั้งสต๊อก การตอบแชท และโอกาสที่ออเดอร์จะหลุด ถ้าเก็บจุดนี้ก่อน ร้านจะโตต่อได้ง่ายขึ้น',
     channel_fit:'จากที่ตอบมา สินค้าหลักตัวนี้อาจยังไม่ได้มีเหตุผลมากพอให้ลูกค้ายอมซื้อผ่าน Shopee ในตอนนี้ เลยต้องเช็กก่อนว่าจะดันต่อ หรือปรับบทบาทของสินค้าตัวนี้ใหม่'
   }[label];
 
   const pain = {
     traffic:'จากที่ตอบมา แปลว่าร้านยังต้องเก็บเรื่องหน้าร้าน การจัดหมวดหมู่ และหน้าสินค้าให้ชัดขึ้นก่อน เพราะตอนนี้คนมีโอกาสเจอสินค้าแล้ว แต่ร้านยังพาเขาไปต่อได้ไม่ดีพอ',
-    trust:'จากที่ตอบมา แปลว่าลูกค้าเริ่มเห็นสินค้าแล้ว แต่ยังต้องการความมั่นใจเพิ่มก่อนกดซื้อ โดยเฉพาะเรื่องรูป รีวิว และรายละเอียดสินค้า',
-    price: promoFirst ? 'จากที่ตอบมา ปัญหาหลักไม่ใช่ราคาสินค้าเดี่ยวอย่างเดียว แต่เป็นร้านยังไม่ได้เพิ่มแรงจูงใจให้ลูกค้าตัดสินใจซื้อตัดสินใจซื้อเร็วขึ้น' : 'จากที่ตอบมา ลูกค้ามักจะเทียบราคาก่อน และร้านยังไม่ได้ทำให้เห็นชัดว่าซื้อกับร้านนี้แล้วได้อะไรเพิ่ม',
+    trust: arch.comparePriceHigh || arch.educationNeedHigh
+      ? 'จากที่ตอบมา แปลว่าลูกค้าเริ่มเห็นสินค้าแล้ว แต่ยังต้องการความมั่นใจเพิ่มก่อนกดซื้อ โดยเฉพาะเรื่องสภาพสินค้า รายละเอียด และความสบายใจหลังซื้อ'
+      : 'จากที่ตอบมา แปลว่าลูกค้าเริ่มเห็นสินค้าแล้ว แต่ยังต้องการความมั่นใจเพิ่มก่อนกดซื้อ โดยเฉพาะเรื่องรูป รีวิว และรายละเอียดสินค้า',
+    price: promoFirst
+      ? 'จากที่ตอบมา ปัญหาหลักไม่ใช่ราคาสินค้าเดี่ยวอย่างเดียว แต่เป็นร้านยังไม่ได้เพิ่มแรงจูงใจให้ลูกค้าตัดสินใจซื้อเร็วขึ้น'
+      : 'จากที่ตอบมา ลูกค้ามักจะเทียบราคาก่อน และร้านยังไม่ได้ทำให้เห็นชัดว่าซื้อกับร้านนี้แล้วได้อะไรเพิ่ม',
     ops:'จากที่ตอบมา ปัญหาหลักตอนนี้อยู่ที่ความพร้อมของร้าน ทั้งสต๊อก การตอบแชท และโอกาสที่ออเดอร์จะหลุด',
     channel_fit:'จากที่ตอบมา สินค้าหลักตัวนี้อาจยังไม่ได้มีเหตุผลมากพอให้ลูกค้ายอมซื้อผ่าน Shopee ในตอนนี้'
   }[label];
 
   const strengths = buildStrengthBulletsFromState();
 
-  return { type:label, strongest, weakest, total:getQuickScore(), summary, title, pain, priorities, strengthBullets:strengths.slice(0,3), targetAdvice };
+  return {
+    type:label,
+    strongest,
+    weakest,
+    total:getQuickScore(),
+    summary,
+    title,
+    pain,
+    priorities,
+    strengthBullets:strengths.slice(0,3),
+    targetAdvice
+  };
 }
 
 
@@ -2778,6 +3238,8 @@ function renderQuickResult() {
           ${renderQuickSectionBars(getQuickSectionStats())}
         </div>
       </div>
+
+      ${renderAISection('step1', 'ผลวิเคราะห์เบื้องต้นจาก AI')}
 
       <div class="text-block">
         <h3>จุดหลักลำดับแรกที่ทำให้ยอดไม่มา</h3>
@@ -3133,7 +3595,8 @@ function renderEmailCollect() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) return;
     state.email = emailVal;
     state.name = nameVal;
-    state.phase = 'final-preview';
+    state.phase = 'final-loading';
+    ensureAIAnalysis('step2');
     renderCurrent();
     scrollStageTop();
   });
@@ -3162,11 +3625,16 @@ function buildFinalPreview() {
   const quick = buildQuickResult();
   const scores = scoreIssues();
   const label = getCombinedLabel(scores, true);
+  const arch = getArchetype();
   const targetAdvice = getTargetAdvice();
 
   const roleMap = {
-    traffic:'โตได้ถ้าโฟกัสจริงจังเรื่องตกแต่งหน้าร้าน จัดหมวดหมู่สินค้า และเก็บรายละเอียดหน้าสินค้าให้ครบ โอกาสโตยังมีสูงเลยค่ะ',
-    trust:'โตได้ค่ะ แต่ต้องทำให้ลูกค้าดูแล้วมั่นใจขึ้นก่อน ทั้งรูป รีวิว และรายละเอียดสินค้า',
+    traffic: arch.comparePriceHigh
+      ? 'โตได้ค่ะ ถ้าโฟกัสให้คนหาเจอสินค้าง่ายขึ้น และทำให้หน้าร้านพาเขาไปดูต่อได้ลื่นขึ้น'
+      : 'โตได้ค่ะ ถ้าโฟกัสจริงจังเรื่องตกแต่งหน้าร้าน จัดหมวดหมู่สินค้า และเก็บรายละเอียดหน้าสินค้าให้ครบ',
+    trust: arch.comparePriceHigh || arch.educationNeedHigh
+      ? 'โตได้ค่ะ แต่ต้องทำให้ลูกค้าดูแล้วสบายใจขึ้นก่อน ทั้งข้อมูลสภาพสินค้า รายละเอียด และสิ่งที่ได้หลังซื้อ'
+      : 'โตได้ค่ะ แต่ต้องทำให้ลูกค้าดูแล้วมั่นใจขึ้นก่อน ทั้งรูป รีวิว และรายละเอียดสินค้า',
     price:'โตได้ค่ะ ถ้าทำให้ลูกค้าเห็นชัดว่าซื้อกับร้านนี้แล้วได้อะไรเพิ่ม ไม่ใช่ปล่อยให้เขาตัดสินใจจากราคาอย่างเดียว',
     ops:'โตได้ค่ะ แต่ต้องเก็บระบบร้านให้พร้อมก่อน ทั้งสต๊อก แชท และการรับออเดอร์',
     channel_fit:'โตได้ค่ะ แต่ควรเลือกให้ชัดก่อนว่าสินค้าหลักตัวนี้ควรดันบน Shopee ต่อแบบไหน'
@@ -3190,26 +3658,88 @@ function buildFinalPreview() {
 function build30DayPlan(type, deep) {
   const label = type;
   const d4 = deep.d4?.code || '';
-  const targetAdvice = getTargetAdvice();
+  const arch = getArchetype();
 
   const plans = {
     traffic: [
-      { week:'สัปดาห์ที่ 1', title:'ทำ 2 อย่างพร้อมกัน: แบนเนอร์ + จัดหมวดหมู่สินค้า', detail:'เริ่มจากหน้าร้านก่อน ให้ลูกค้าที่เข้ามาแล้วไปต่อได้ง่าย และเก็บชื่อสินค้าหลัก 3 ตัวให้ใกล้คำที่ลูกค้าใช้ค้นหา' },
-      { week:'สัปดาห์ที่ 2', title:'เลือก 3 สินค้าหลักที่อยากปั้น แล้วเก็บให้เป๊ะ', detail:'ปรับรูปปก ชื่อสินค้า และคำอธิบายของ 3 ตัวนี้ก่อน จะได้ไม่เหนื่อยมากเกินไปค่ะ' },
-      { week:'สัปดาห์ที่ 3', title:'ดูข้อมูลจาก Seller Center แล้วเช็กว่าคนกดเข้ามาแล้วหลุดตรงไหน', detail:'ถ้าคนเห็นแล้วไม่กดเข้า ให้กลับไปดูรูปปกกับชื่อสินค้า ถ้ากดเข้าแล้วไม่ซื้อ ค่อยดูต่อว่าติดเรื่องราคา หรือข้อมูลยังไม่พอ' },
-      { week:'สัปดาห์ที่ 4', title:'เอาตัวที่เริ่มดีไปต่อยอด แล้วค่อยขยายไปสินค้าอื่น', detail:'ดูว่าสินค้าตัวไหนเริ่มดีขึ้น แล้วค่อยทำซ้ำกับสินค้าตัวถัดไป' }
+      {
+        week:'สัปดาห์ที่ 1',
+        title:'ทำ 2 อย่างพร้อมกัน: เก็บหน้าร้าน + เก็บสินค้าหลัก',
+        detail: arch.comparePriceHigh
+          ? 'เริ่มจากแบนเนอร์ จัดหมวดหมู่ และเก็บชื่อสินค้าหลักให้มีรุ่น สเปก และสภาพชัดเจน'
+          : 'เริ่มจากแบนเนอร์ จัดหมวดหมู่ และเก็บชื่อสินค้าหลักให้ใกล้คำที่ลูกค้าใช้ค้นหา'
+      },
+      {
+        week:'สัปดาห์ที่ 2',
+        title:'เลือก 3 สินค้าหลักที่อยากปั้น แล้วเก็บให้เป๊ะ',
+        detail:'ปรับรูปปก ชื่อสินค้า และคำอธิบายของ 3 ตัวนี้ก่อน จะได้ไม่เหนื่อยมากเกินไปค่ะ'
+      },
+      {
+        week:'สัปดาห์ที่ 3',
+        title:'ดูข้อมูลจาก Seller Center แล้วเช็กว่าคนกดเข้ามาแล้วหลุดตรงไหน',
+        detail:'ถ้าคนเห็นแล้วไม่กดเข้า ให้กลับไปดูรูปปกกับชื่อสินค้า ถ้ากดเข้าแล้วไม่ซื้อ ค่อยดูต่อว่าติดเรื่องราคา หรือข้อมูลยังไม่พอ'
+      },
+      {
+        week:'สัปดาห์ที่ 4',
+        title:'เอาตัวที่เริ่มดีไปต่อยอด แล้วค่อยขยายไปสินค้าอื่น',
+        detail:'ดูว่าสินค้าตัวไหนเริ่มดีขึ้น แล้วค่อยทำซ้ำกับสินค้าตัวถัดไป'
+      }
     ],
     trust: [
-      { week:'สัปดาห์ที่ 1', title:'เก็บรูป รีวิว และคำอธิบายของสินค้าหลักพร้อมกัน', detail:'เริ่มจาก 1–3 ตัวที่อยากดันก่อน ทำให้ลูกค้าเห็นแล้วสบายใจมากขึ้นทันที' },
-      { week:'สัปดาห์ที่ 2', title:'เติมหลักฐานที่ช่วยให้ตัดสินใจง่ายขึ้น', detail:'เช่น รีวิวพร้อมรูป วิดีโอ หรือข้อมูลที่ลูกค้ามักถามบ่อย เพื่อให้หน้าสินค้าช่วยตอบแทนแชทได้มากขึ้น' },
-      { week:'สัปดาห์ที่ 3', title:'ดูว่าลูกค้ายังหลุดเพราะราคา หรือเพราะข้อมูลยังไม่พอ', detail:'ถ้าคนเข้ามาแล้วแต่ยังไม่ซื้อ ดูว่าลูกค้าทักถามอะไรบ่อย แล้วเติมสิ่งนั้นเข้าไปในหน้าสินค้า' },
-      { week:'สัปดาห์ที่ 4', title:'ดึงข้อมูลทั้งเดือนมาดู แล้วค่อยขยายไปสินค้าตัวถัดไป', detail:'ใช้ข้อมูลจริงจาก Seller Center ว่าสินค้าตัวไหนเริ่มดีขึ้น แล้วค่อยต่อยอด' }
+      {
+        week:'สัปดาห์ที่ 1',
+        title:'เก็บหน้าสินค้าหลักพร้อมกันทั้งรูป รีวิว และรายละเอียด',
+        detail: arch.comparePriceHigh || arch.educationNeedHigh
+          ? 'เริ่มจาก 1–3 ตัวที่อยากดันก่อน ทำให้ลูกค้าเห็นสภาพสินค้า จุดตำหนิ สิ่งที่ได้ และความสบายใจหลังซื้อให้ชัด'
+          : 'เริ่มจาก 1–3 ตัวที่อยากดันก่อน ทำให้ลูกค้าเห็นแล้วสบายใจมากขึ้นทันที'
+      },
+      {
+        week:'สัปดาห์ที่ 2',
+        title:'เติมหลักฐานที่ช่วยให้ตัดสินใจง่ายขึ้น',
+        detail:'เช่น รีวิวพร้อมรูป วิดีโอ หรือข้อมูลที่ลูกค้ามักถามบ่อย เพื่อให้หน้าสินค้าช่วยตอบแทนแชทได้มากขึ้น'
+      },
+      {
+        week:'สัปดาห์ที่ 3',
+        title:'ดูว่าลูกค้ายังหลุดเพราะราคา หรือเพราะข้อมูลยังไม่พอ',
+        detail:'ถ้าคนเข้ามาแล้วแต่ยังไม่ซื้อ ดูว่าลูกค้าทักถามอะไรบ่อย แล้วเติมสิ่งนั้นเข้าไปในหน้าสินค้า'
+      },
+      {
+        week:'สัปดาห์ที่ 4',
+        title:'ดึงข้อมูลทั้งเดือนมาดู แล้วค่อยขยายไปสินค้าตัวถัดไป',
+        detail:'ใช้ข้อมูลจริงจาก Seller Center ว่าสินค้าตัวไหนเริ่มดีขึ้น แล้วค่อยต่อยอด'
+      }
     ],
     price: [
-      { week:'สัปดาห์ที่ 1', title:'เลือกสินค้าหลักที่คนเห็นเยอะก่อน แล้วทำข้อเสนอให้น่าลองขึ้น', detail:'เริ่มจากคูปองร้าน Bundle Deal หรือ Flash Sale กับสินค้าหลักก่อน หรือเพิ่มจุดต่างที่ทำให้ลูกค้ารู้สึกว่าซื้อแล้วได้อะไรเพิ่ม' },
-      { week:'สัปดาห์ที่ 2', title:'หยิบจุดขายที่ทำให้รู้สึกคุ้มขึ้นไปไว้บนรูปปกและหน้าสินค้า', detail:'เช่น ผ่อนได้ ของแถมเล็ก ๆ ประกันร้าน หรือข้อมูลที่ทำให้ลูกค้าตัดสินใจง่ายขึ้น' },
-      { week:'สัปดาห์ที่ 3', title:'ดูผลจาก Seller Center ว่าคนเข้ามาแล้วซื้อดีขึ้นไหม', detail: ['promo_never','promo_some','promo_unsure'].includes(d4) ? 'ถ้าคนกดเข้ามาแล้วดีขึ้น แปลว่าเริ่มถูกทาง แต่ถ้ายังไม่มา ให้กลับไปดูว่าลูกค้ายังไม่เห็นความคุ้มตรงไหน' : 'ถ้าเคยทำโปรแล้วแต่ยอดยังไม่มา ให้ย้อนดูว่าติดเรื่องราคา หรือหน้าสินค้ายังไม่พอให้ลูกค้าตัดสินใจ' },
-      { week:'สัปดาห์ที่ 4', title:'เก็บข้อมูลทั้งเดือนมาดู แล้วตัดสินใจว่าควรขยับต่อแบบไหน', detail:'ดูว่าสินค้าตัวไหนช่วยทำยอดได้จริง แล้วค่อยขยายต่อ ส่วนตัวที่ยังไปยากให้ปรับบทบาทของสินค้า ไม่ต้องฝืนดันทุกรายการ' }
+      {
+        week:'สัปดาห์ที่ 1',
+        title:'เลือกสินค้าหลักที่คนเห็นเยอะก่อน แล้วเพิ่มแรงจูงใจให้ซื้อ',
+        detail: ['promo_never','promo_some','promo_unsure'].includes(d4)
+          ? (arch.bundlePotential
+              ? 'เริ่มจากคูปองร้านหรือ Bundle Deal กับสินค้าหลักก่อน ยังไม่ต้องทำทั้งร้าน'
+              : 'เริ่มจากคูปองร้าน Flash Sale หรือของแถมเล็ก ๆ กับสินค้าหลักก่อน ยังไม่ต้องทำทั้งร้าน')
+          : 'เริ่มจากเก็บข้อเสนอและจุดขายของสินค้าหลักให้ชัดขึ้นก่อน แล้วค่อยเช็กว่าลูกค้ายังติดตรงไหน'
+      },
+      {
+        week:'สัปดาห์ที่ 2',
+        title:'หยิบจุดที่ทำให้ลูกค้ารู้สึกว่าคุ้มขึ้นไปไว้บนรูปปกและหน้าสินค้า',
+        detail: arch.comparePriceHigh
+          ? 'เช่น ผ่อนได้ ของแถมเล็ก ๆ ประกันร้าน หรือเช็กสภาพก่อนส่ง'
+          : arch.bundlePotential
+            ? 'เช่น การจัดเซต ซื้อหลายชิ้นคุ้มกว่า หรือคูปองขั้นต่ำ'
+            : 'เช่น ของแถมเล็ก ๆ หรือข้อความที่ทำให้ลูกค้าเห็นชัดว่าซื้อแล้วได้อะไรเพิ่ม'
+      },
+      {
+        week:'สัปดาห์ที่ 3',
+        title:'ดูผลจาก Seller Center ว่าคนเข้ามาแล้วซื้อดีขึ้นไหม',
+        detail: ['promo_never','promo_some','promo_unsure'].includes(d4)
+          ? 'ถ้าคนกดเข้ามาแล้วดีขึ้น แปลว่าเริ่มถูกทาง แต่ถ้ายังไม่มา ให้กลับไปดูว่าลูกค้ายังไม่เห็นความคุ้มตรงไหน'
+          : 'ถ้าเคยทำโปรแล้วแต่ยอดยังไม่มา ให้ย้อนดูว่าติดเรื่องราคา หรือหน้าสินค้ายังไม่พอให้ลูกค้าตัดสินใจ'
+      },
+      {
+        week:'สัปดาห์ที่ 4',
+        title:'เก็บข้อมูลทั้งเดือนมาดู แล้วตัดสินใจว่าควรขยับต่อแบบไหน',
+        detail:'ดูว่าสินค้าตัวไหนช่วยทำยอดได้จริง แล้วค่อยขยายต่อ ส่วนตัวที่ยังไปยากให้ปรับข้อเสนอหรือบทบาทของสินค้า ไม่ต้องฝืนดันทุกรายการ และถ้ามี social media ให้โพสต์โปรพร้อมแปะลิงก์ร้านในช่วงเดียวกันด้วย'
+      }
     ],
     ops: [
       { week:'สัปดาห์ที่ 1', title:'เก็บสต๊อกกับการตอบแชทให้พร้อมก่อน', detail:'ทำ 2 อย่างนี้พร้อมกันเลย จะช่วยลดออเดอร์หลุดและทำให้ร้านพร้อมรับยอดมากขึ้น' },
@@ -3218,13 +3748,28 @@ function build30DayPlan(type, deep) {
       { week:'สัปดาห์ที่ 4', title:'ดึงข้อมูลทั้งเดือนมาดู แล้วค่อยเร่งต่อ', detail:'ถ้าระบบนิ่งขึ้นแล้ว ค่อยเติมโปรหรือเครื่องมือเพิ่มยอดต่อได้ค่ะ' }
     ],
     channel_fit: [
-      { week:'สัปดาห์ที่ 1', title:'เช็กก่อนว่าสินค้าหลักตัวนี้ยังเหมาะจะดันบน Shopee ไหม', detail:'เลือก 3 ตัวมาเทียบเรื่องราคาขาย ค่าธรรมเนียม สิ่งที่ลูกค้าได้เพิ่ม และเหตุผลที่ทำให้ซื้อแล้วสบายใจกว่า' },
-      { week:'สัปดาห์ที่ 2', title:'ถ้ายังพอขายได้ ให้ดันเหตุผลที่ลูกค้าจะยอมซื้อผ่าน Shopee ให้ชัด', detail:'เช่น โค้ดส่วนลด การผ่อนอย่าง SpayLater ความสบายใจ รีวิว หรือของแถมเล็ก ๆ แล้วเอาขึ้นไปไว้ในรูปปกและหน้าสินค้า' },
-      { week:'สัปดาห์ที่ 3', title:'ดูข้อมูลจาก Seller Center ว่าคนเข้ามาแล้วหลุดเพราะอะไร', detail:'ถ้าคนเข้ามาแล้วไม่ซื้อ ดูว่าลูกค้ายังมองไม่เห็นความคุ้ม หรือยังไม่มั่นใจพอ แล้วค่อยปรับตรงนั้นต่อ' },
-      { week:'สัปดาห์ที่ 4', title:'สรุปบทบาทของสินค้าตัวนี้ใหม่ แล้วตั้งเป้ารอบถัดไปให้เหมาะขึ้น', detail: targetAdvice && !targetAdvice.realistic ? targetAdvice.text : 'ดูว่าสินค้าตัวนี้ควรใช้ทำยอดต่อ หรือควรใช้เป็นตัวช่วยสร้างความน่าเชื่อถือก่อน' }
+      {
+        week:'สัปดาห์ที่ 1',
+        title:'เช็กก่อนว่าสินค้าหลักตัวนี้ยังมีเหตุผลให้ลูกค้าซื้อผ่าน Shopee อยู่ไหม',
+        detail:'เลือก 3 ตัวมาเทียบเรื่องราคาขาย ค่าธรรมเนียม สิ่งที่ลูกค้าได้เพิ่ม และเหตุผลที่ทำให้ลูกค้ารู้สึกว่าซื้อผ่าน Shopee แล้วคุ้ม'
+      },
+      {
+        week:'สัปดาห์ที่ 2',
+        title:'ถ้ายังพอขายผ่าน Shopee ได้ ให้ดันเหตุผลนั้นขึ้นมาให้ชัด',
+        detail:'เช่น โค้ดส่วนลด การผ่อนอย่าง SpayLater ความสบายใจหลังซื้อ รีวิว หรือข้อเสนอที่ช่วยให้ลูกค้าตัดสินใจง่ายขึ้น'
+      },
+      {
+        week:'สัปดาห์ที่ 3',
+        title:'ดูข้อมูลจริงว่าคนเข้ามาแล้วหลุดตรงไหน',
+        detail:'ถ้าคนเข้ามาแล้วไม่ซื้อ ให้ดูว่าติดเรื่องราคา เรื่องข้อเสนอ หรือหน้าสินค้ายังไม่ช่วยพอ'
+      },
+      {
+        week:'สัปดาห์ที่ 4',
+        title:'สรุปบทบาทของสินค้าหลักตัวนี้ให้ชัด',
+        detail:'ดูว่าสินค้านี้ควรใช้ทำยอด ใช้สร้างความน่าเชื่อถือ หรือควรดันเฉพาะช่วงแคมเปญ จะได้ไม่ใช้แรงผิดจุด'
+      }
     ]
   };
-
   return plans[label] || plans.traffic;
 }
 
@@ -3276,8 +3821,10 @@ function renderFinalPreview() {
         </div>
       </div>
 
+      ${renderAISection('step2', 'ผลวิเคราะห์เชิงลึกจาก AI')}
+
       <div class="text-block">
-        <h3>สิ่งที่ยังพอเป็นแรงจูงใจให้ลูกค้าตัดสินใจซื้อซื้อได้อยู่</h3>
+        <h3>สิ่งที่ยังพอเป็นแรงจูงใจให้ลูกค้าตัดสินใจซื้อได้อยู่</h3>
         <ul class="strength-list">${final.strengths.map(item => `<li>${escapeHTML(item)}</li>`).join('')}</ul>
       </div>
 
@@ -3349,6 +3896,8 @@ function renderQuickSectionBars(secScores) {
 
 
 function restartAll() {
+  stopLoadingTicker('step1');
+  stopLoadingTicker('step2');
   state.phase = 'setup';
   state.current = 0;
   state.quickAnswers = {};
@@ -3358,6 +3907,10 @@ function restartAll() {
   state.name = '';
   state.paymentMethod = 'promptpay';
   state.profile = { shopName:'', shopCat:'', heroProduct:'', monthlyOrders:'', targetOrders:'', mainProblem:'' };
+  state.ai = {
+    step1:{ requested:false, loading:false, text:'', error:'', statusIndex:0, statusTimer:null },
+    step2:{ requested:false, loading:false, text:'', error:'', statusIndex:0, statusTimer:null }
+  };
   document.body.classList.remove('result-active');
   renderCurrent();
   scrollStageTop();
@@ -3377,573 +3930,6 @@ function escapeHTML(str) {
 }
 
 function escapeAttr(str) { return escapeHTML(str); }
-
-/* ── Diagnose AI Engine ───────────────────────────────────────────────
-   Uses /api/diagnose with OpenAI backend.
-   renderQuickResult and renderFinalPreview are overridden below.    */
-
-async function callClaude(prompt) {
-  const res = await fetch('/api/diagnose', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, score: 0, total: 0, answers: '' })
-  });
-
-  const raw = await res.text();
-
-  let data = {};
-  try {
-    data = JSON.parse(raw);
-  } catch (e) {
-    throw new Error(raw || 'API ไม่ได้ส่ง JSON กลับมา');
-  }
-
-  if (!res.ok) {
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-
-  if (data.error) {
-    throw new Error(data.error);
-  }
-
-  return data.result || '';
-}
-
-function buildStep1Prompt() {
-  const p = state.profile;
-  const answers = QUICK_QUESTIONS.map(q => {
-    const a = state.quickAnswers[q.id];
-    return `- ${q.title}: ${a ? a.label : 'ไม่ได้ตอบ'}${a ? ` | เหตุผลย่อ: ${a.sub}` : ''}${a ? ` | คะแนน ${a.val}/1` : ''}`;
-  }).join('\n');
-
-  const totalScore = getQuickScore();
-  const goodItems = QUICK_QUESTIONS.filter(q => (state.quickAnswers[q.id]?.val || 0) >= 1).map(q => q.title);
-  const weakItems = QUICK_QUESTIONS.filter(q => (state.quickAnswers[q.id]?.val || 0) < 0.5).map(q => q.title);
-  const targetAdvice = getTargetAdvice();
-
-  return `ช่วยวิเคราะห์ร้าน Shopee นี้แบบผลฟรีรอบแรก
-
-ข้อมูลร้าน
-- ชื่อร้าน: ${p.shopName || 'ไม่ระบุ'}
-- หมวดหมู่สินค้า: ${p.shopCat || 'ไม่ระบุ'}
-- สินค้าที่อยากดัน: ${p.heroProduct || 'ไม่ระบุ'}
-- ออเดอร์ปัจจุบันต่อเดือน: ${p.monthlyOrders || 'ไม่ระบุ'}
-- เป้าหมายออเดอร์ต่อเดือน: ${p.targetOrders || 'ไม่ระบุ'}
-- ปัญหาหลักที่เจ้าของร้านรู้สึกอยู่ตอนนี้: ${p.mainProblem || 'ไม่ระบุ'}
-
-คะแนนรวมรอบแรก: ${typeof totalScore === 'number' ? totalScore.toFixed(1) : totalScore}/8
-จุดที่ทำได้ดี: ${goodItems.length ? goodItems.join(' | ') : 'ยังไม่มีจุดที่เด่นชัด'}
-จุดที่ยังอ่อน: ${weakItems.length ? weakItems.join(' | ') : 'ยังไม่มีจุดที่อ่อนมาก'}
-${targetAdvice ? `ข้อสังเกตเรื่องเป้าหมาย: ${targetAdvice.text}` : ''}
-
-คำตอบ checklist
-${answers}
-
-กฎสำคัญ
-- อ้างอิงชื่อร้าน "${p.shopName || 'ร้านนี้'}" สินค้า "${p.heroProduct || 'สินค้าหลัก'}" และหมวด "${p.shopCat || 'หมวดนี้'}" ให้เป็นธรรมชาติ
-- ถ้าพูดถึงหมวดแฟชั่น อย่าพูดกว้าง ๆ ว่า "รูปไม่ดี" ให้ระบุให้เห็นภาพ เช่น crop ผิด ไม่มีรูปใส่จริง ตารางไซส์ยังไม่ชัด หรือมีแต่ภาพวางราบ
-- ถ้าราคาสู้ยาก อย่าพูดลอย ๆ ให้เสนอจุดขายอื่นที่ควรสื่อแทน เช่น ตรงปก ผ้าดี รีวิวดี ความสบายใจหลังซื้อ
-- ภาษาต้องเป็นภาษาคนจริง ไม่ใช่ภาษาระบบ
-- คำแนะนำต้อง usable ไม่สั้นจนเกินไป
-
-เขียนคำตอบตาม format นี้เท่านั้น
-
-**ภาพรวมร้าน ${p.shopName || 'ตอนนี้'}**
-เขียน 3-4 ประโยค สรุปภาพรวมตามคะแนนและ gap ระหว่างออเดอร์ปัจจุบันกับเป้าหมาย พูดตรงแต่ไม่ทุบกำลังใจ
-
-**จุดเด่นของร้านที่ต้องรักษาไว้**
-เขียนเป็น bullet ด้วย • อย่างน้อย 2 ข้อถ้ามี
-ถ้าไม่ค่อยมีจุดเด่นชัด ให้บอกตรง ๆ แต่ยังอ่านลื่น
-
-**จุดที่ควรปรับก่อน**
-ขึ้นต้นด้วย 1 ประโยคสรุปก่อน แล้วตามด้วย numbered list 1-3 ข้อ
-แต่ละข้อให้มี:
-1. ชื่อปัญหาสั้น ๆ
-ตามด้วยคำอธิบาย 2-3 ประโยคว่าเพราะอะไรถึงกระทบยอดขาย "${p.heroProduct || 'สินค้าหลัก'}"
-
-**Action plan 1 ข้อที่ทำได้เลยสัปดาห์นี้**
-เลือก 1 เรื่องที่ impact สูงสุด
-ต้องมีครบ:
-- ทำอะไร
-- ทำกับอะไร
-- วิธีทำเป็น step by step ขึ้นบรรทัดใหม่
-- เวลาที่ใช้ในวงเล็บ
-- ผลที่คาดว่าจะเห็นใน 1-2 สัปดาห์
-- ปิดท้าย teaser สั้น ๆ ว่ายังมีเรื่องสำคัญอื่นรออยู่ในรอบวิเคราะห์เชิงลึก
-
-ความยาวรวมประมาณ 500-650 คำ`;
-}
-
-function buildStep2Prompt() {
-  const p = state.profile;
-  const step1Answers = QUICK_QUESTIONS.map(q => {
-    const a = state.quickAnswers[q.id];
-    return `- ${q.title}: ${a ? a.label : 'ไม่ได้ตอบ'}${a ? ` | เหตุผลย่อ: ${a.sub}` : ''}`;
-  }).join('\n');
-
-  const step2Answers = DEEP_COMMON.map(q => {
-    const a = state.deepAnswers[q.id];
-    if (q.multi && Array.isArray(a)) {
-      const labels = a.map(item => item.label || item.code || '').filter(Boolean).join(', ');
-      return `- ${q.title}: ${labels || 'ไม่ได้ตอบ'}`;
-    }
-    return `- ${q.title}: ${a?.label || a?.code || 'ไม่ได้ตอบ'}`;
-  }).join('\n');
-
-  const targetAdvice = getTargetAdvice();
-
-  return `ช่วยวิเคราะห์ร้าน Shopee นี้แบบผลเชิงลึกรอบจ่ายเงิน
-
-ข้อมูลร้าน
-- ชื่อร้าน: ${p.shopName || 'ไม่ระบุ'}
-- หมวดหมู่สินค้า: ${p.shopCat || 'ไม่ระบุ'}
-- สินค้าที่อยากดัน: ${p.heroProduct || 'ไม่ระบุ'}
-- ออเดอร์ปัจจุบันต่อเดือน: ${p.monthlyOrders || 'ไม่ระบุ'}
-- เป้าหมายออเดอร์ต่อเดือน: ${p.targetOrders || 'ไม่ระบุ'}
-- ปัญหาหลักที่เจ้าของร้านรู้สึก: ${p.mainProblem || 'ไม่ระบุ'}
-${targetAdvice ? `- ข้อสังเกตเรื่องเป้าหมาย: ${targetAdvice.text}` : ''}
-
-คำตอบ Step 1
-${step1Answers}
-
-คำตอบ Step 2
-${step2Answers}
-
-กฎสำคัญ
-- เขียนให้ลึกกว่า step ฟรีอย่างชัดเจน
-- อย่าให้คำแนะนำสั้นหรือ generic
-- ทุก action plan ต้องมี: ทำอะไร / ทำกับอะไร / วิธีทำ / เพราะอะไร / คาดหวังอะไร
-- ถ้าพูดถึงโปรโมชัน ให้ยกตัวอย่างใช้งานได้จริง เช่น คูปองร้าน Flash Sale Bundle Deal และบอกว่าควรทำกับสินค้าไหนก่อน
-- ถ้าพูดถึง Ads ให้เริ่มด้วย empathy ก่อน และอย่าแนะนำ bid ต่ำผิดจริง
-- ถ้าพูดถึง keyword ให้แนะนำจากสินค้าจริง แต่บอกด้วยว่าควรเช็กคำค้นหาในระบบ Shopee Ads อีกที
-- ถ้าสินค้าอยู่ในตลาดแข่งราคาหนัก ให้ชี้จุดขายอื่นที่ต้องดันขึ้นมาแทนการลดราคาอย่างเดียว
-- ภาษาต้องเป็น consultant ที่อ่านแล้วรู้สึกว่าเข้าใจร้านนี้จริง
-
-ตอบตาม format นี้เท่านั้น
-
-**ภาพรวมจากข้อมูลเชิงลึก**
-เขียน 1 ย่อหน้า สรุปให้ชัดว่าตอนนี้ร้านควรโตบน Shopee แบบไหน และ pain หลักอยู่ตรงไหน
-
-**3 Action plan หลักที่ต้องทำก่อน**
-เรียงจาก impact สูงสุดไปต่ำสุด
-ข้อ 1 ต้องมาก่อนเรื่องรูปสินค้า/หน้าสินค้า ถ้ายังเป็น pain อยู่
-ข้อ 2 ให้เป็นเรื่องโปรโมชันหรือ Marketing Center
-ข้อ 3 ให้เป็นเรื่อง traffic หรือ Ads ถ้ายังจำเป็น
-
-แต่ละข้อให้เขียนแบบนี้
-1. ชื่อ action
-ตามด้วย:
-- ทำอะไร
-- ทำกับอะไร
-- วิธีทำ:
-→ ขั้นที่ 1
-→ ขั้นที่ 2
-→ ขั้นที่ 3
-- ใช้เวลา:
-- ผลที่คาดว่าจะเห็นใน 1-2 สัปดาห์:
-
-**แผน 30 วันสำหรับร้าน ${p.shopName || 'นี้'}**
-ต้องครบทั้ง 4 สัปดาห์ และใช้ format นี้เท่านั้น
-[สัปดาห์ที่ 1 — ชื่อโฟกัส]
-2-3 ประโยค
-
-[สัปดาห์ที่ 2 — ชื่อโฟกัส]
-2-3 ประโยค
-
-[สัปดาห์ที่ 3 — ชื่อโฟกัส]
-2-3 ประโยค
-
-[สัปดาห์ที่ 4 — ชื่อโฟกัส]
-2-3 ประโยค
-
-**ประเมิน Channel Fit — ร้านนี้ควรโตบน Shopee แบบไหน**
-เขียน 1-2 ย่อหน้า บอกตรง ๆ ว่า Shopee ยังเหมาะกับ "${p.heroProduct || 'สินค้าหลัก'}" ไหม ควรดันต่อแบบไหน และอะไรคือข้อจำกัดที่ต้องระวัง
-
-ความยาวรวมประมาณ 700-1000 คำ`;
-}
-
-/* Animated loading with rotating messages */
-function showLoadingWithMessages(msgs) {
-  let idx = 0;
-  el.stageCard.innerHTML = `
-    <div class="result-card" style="padding:56px 24px; text-align:center;">
-      <div style="display:inline-flex; gap:6px; margin-bottom:22px; align-items:center;">
-        <span style="width:10px;height:10px;background:var(--brand);border-radius:50%;display:inline-block;animation:waveJump 1.0s ease-in-out infinite 0s;"></span>
-        <span style="width:10px;height:10px;background:var(--brand);border-radius:50%;display:inline-block;animation:waveJump 1.0s ease-in-out infinite 0.18s;"></span>
-        <span style="width:10px;height:10px;background:var(--brand);border-radius:50%;display:inline-block;animation:waveJump 1.0s ease-in-out infinite 0.36s;"></span>
-      </div>
-      <div id="sc-loading-msg" style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:8px;min-height:26px;transition:opacity 0.35s;">${escapeHTML(msgs[0])}</div>
-      <div style="font-size:12px;color:var(--text3);">ใช้เวลาประมาณ 15–25 วินาทีค่ะ</div>
-    </div>`;
-  const timer = setInterval(() => {
-    idx = (idx + 1) % msgs.length;
-    const msgEl = document.getElementById('sc-loading-msg');
-    if (msgEl) {
-      msgEl.style.opacity = '0';
-      setTimeout(() => { if (msgEl) { msgEl.textContent = msgs[idx]; msgEl.style.opacity = '1'; } }, 320);
-    }
-  }, 2400);
-  return timer;
-}
-
-function normalizeSectionTitle(title = '') {
-  return String(title)
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
-
-function parseAISections(rawText = '') {
-  const text = String(rawText || '').trim();
-
-  const result = {
-    overview: '',
-    strengths: '',
-    weaknesses: '',
-    actionPlan: '',
-    deepActions: '',
-    plan30: '',
-    channelFit: ''
-  };
-
-  if (!text) return result;
-
-  const parts = text.split(/\*\*([^*]+)\*\*/g);
-
-  for (let i = 1; i < parts.length; i += 2) {
-    const title = normalizeSectionTitle(parts[i]);
-    const body = (parts[i + 1] || '').trim();
-
-    if (
-      title.includes('ภาพรวมร้าน') ||
-      title.includes('ภาพรวมตอนนี้') ||
-      title.includes('ภาพรวมจากข้อมูลเชิงลึก')
-    ) {
-      result.overview = body;
-      continue;
-    }
-
-    if (
-      title.includes('จุดเด่นของร้าน') ||
-      title.includes('จุดที่ร้านทำได้ดี') ||
-      title.includes('ต้องรักษาไว้')
-    ) {
-      result.strengths = body;
-      continue;
-    }
-
-    if (
-      title.includes('จุดที่ควรปรับก่อน') ||
-      title.includes('จุดที่ต้องแก้ก่อน') ||
-      title.includes('จุดที่ต้องแก้') ||
-      title.includes('จุดที่ควรแก้')
-    ) {
-      result.weaknesses = body;
-      continue;
-    }
-
-    if (
-      title.includes('action plan 1 ข้อ') ||
-      title.includes('ทำได้เลยสัปดาห์นี้') ||
-      title.includes('ทำก่อนเลยสัปดาห์นี้')
-    ) {
-      result.actionPlan = body;
-      continue;
-    }
-
-    if (
-      title.includes('3 action plan') ||
-      title.includes('3 เรื่องที่ควรโฟกัสก่อน') ||
-      title.includes('action plan หลัก')
-    ) {
-      result.deepActions = body;
-      continue;
-    }
-
-    if (title.includes('แผน 30 วัน')) {
-      result.plan30 = body;
-      continue;
-    }
-
-    if (
-      title.includes('channel fit') ||
-      title.includes('ควรโตบน shopee แบบไหน')
-    ) {
-      result.channelFit = body;
-      continue;
-    }
-  }
-
-  if (!result.overview && text) {
-    const firstChunk = text.split(/\n{2,}/)[0];
-    result.overview = firstChunk;
-  }
-
-  return result;
-}
-
-/* Override renderQuickResult — keep original template, replace content with Claude */
-const _origRenderQuickResult = renderQuickResult;
-renderQuickResult = async function() {
-  const loadingTimer = showLoadingWithMessages([
-    `กำลังอ่านข้อมูลร้าน ${state.profile.shopName || ''}...`,
-    `กำลังวิเคราะห์สินค้า ${state.profile.heroProduct || ''} ในหมวด ${state.profile.shopCat || ''}...`,
-    'กำลังวิเคราะห์คะแนนแต่ละหมวด...',
-    'กำลังหาจุดเด่นและจุดที่ต้องปรับก่อน...',
-    'กำลังเลือก Action plan ที่ impact สูงสุดสำหรับร้านคุณ...',
-    'กำลังเขียนคำแนะนำเฉพาะร้านคุณ...',
-    'เกือบเสร็จแล้วค่ะ รออีกแป๊บนึง...'
-  ]);
-
-  try {
-    const aiText = await callClaude(buildStep1Prompt());
-    clearInterval(loadingTimer);
-    state._step1AI = aiText;
-    window._sc_step1_raw = aiText;  /* DEBUG: check in console */
-    console.log('=== STEP1 RAW ===', aiText);
-
-    const parsed = parseAISections(aiText);
-    const overview = parsed.overview;
-    const strengths = parsed.strengths;
-    const weaknesses = parsed.weaknesses;
-    const actionPlan = parsed.actionPlan;
-
-    /* Build strength bullets */
-    const strengthLines = strengths.split('\n').filter(l=>l.trim().startsWith('•')||l.trim().startsWith('-')).map(l=>l.replace(/^[•\-]\s*/,'')).filter(Boolean);
-
-    const p = state.profile;
-    el.stageCard.innerHTML = `
-      <div class="result-card">
-        <div class="result-top">
-          <div>
-            <div class="result-type-pill">ผลเบื้องต้น • รอบแรกจบแล้ว</div>
-            <h2>ร้านคุณควรโตบน Shopee แบบไหน</h2>
-            <div class="result-meta-lines">
-              <div class="result-meta-line"><strong>หมวดหมู่สินค้า:</strong> ${escapeHTML(p.shopCat||'ไม่ระบุ')}</div>
-              <div class="result-meta-line"><strong>สินค้าที่อยากดัน:</strong> ${escapeHTML(p.heroProduct||'ไม่ระบุ')}</div>
-              <div class="result-meta-line"><strong>ออเดอร์ปัจจุบัน:</strong> ${escapeHTML(p.monthlyOrders||'ไม่ระบุ')}</div>
-              <div class="result-meta-line"><strong>เป้าหมาย:</strong> ${escapeHTML(p.targetOrders||'ไม่ระบุ')}</div>
-            </div>
-          </div>
-          <div class="result-badge">${getQuickVerdict()}</div>
-        </div>
-
-        <div class="result-summary">
-          <div class="score-ring">
-            <div class="ring-pill">คะแนนเบื้องต้น</div>
-            <div class="big">${formatScore(getQuickScore())}/8</div>
-            <div class="small">วิเคราะห์โดย AI · เฉพาะร้านคุณ</div>
-          </div>
-          <div>
-            <div class="quick-value-card">
-              <h3>ภาพรวมร้านตอนนี้</h3>
-              <p class="result-highlight" style="font-size:15px;line-height:1.8;">${escapeHTML(overview)}</p>
-            </div>
-            ${renderQuickSectionBars(getQuickSectionStats())}
-          </div>
-        </div>
-
-        <div class="text-block">
-          <h3>จุดเด่นของร้านที่ต้องรักษาไว้</h3>
-          ${strengthLines.length > 0
-            ? `<ul class="strength-list" style="font-size:14px;line-height:1.8;">${strengthLines.map(s=>`<li>${escapeHTML(s)}</li>`).join('')}</ul>`
-            : `<p style="font-size:14px;line-height:1.8;">${escapeHTML(strengths)}</p>`
-          }
-        </div>
-
-        <div class="text-block">
-          <h3>จุดที่ควรปรับก่อน</h3>
-          ${(() => {
-            if (!weaknesses) return '<p style="color:var(--text3);">-</p>';
-            const lines = weaknesses.split('\n');
-            let html = '';
-            lines.forEach(line => {
-              const t = line.trim();
-              if (!t) return;
-              const headerMatch = t.match(/^(\d+)\.\s*\*\*(.+?)\*\*/);
-              if (headerMatch) {
-                html += `<div style="display:flex;gap:10px;align-items:flex-start;margin:12px 0 4px;">
-                  <span style="background:var(--brand);color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:1px;">${escapeHTML(headerMatch[1])}</span>
-                  <strong style="color:var(--brand);font-size:14px;line-height:1.5;">${escapeHTML(headerMatch[2])}</strong>
-                </div>`;
-              } else if (/^\d+\./.test(t)) {
-                const num = t.match(/^(\d+)\./)[1];
-                const rest = t.replace(/^\d+\.\s*/, '');
-                html += `<div style="display:flex;gap:10px;align-items:flex-start;margin:12px 0 4px;">
-                  <span style="background:var(--brand);color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;margin-top:1px;">${escapeHTML(num)}</span>
-                  <strong style="color:var(--brand);font-size:14px;line-height:1.5;">${escapeHTML(rest)}</strong>
-                </div>`;
-              } else {
-                html += `<p style="font-size:14px;line-height:1.75;color:var(--text2);margin-left:32px;margin-bottom:6px;">${escapeHTML(t)}</p>`;
-              }
-            });
-            return html || `<p style="font-size:14px;line-height:1.8;white-space:pre-wrap;">${escapeHTML(weaknesses)}</p>`;
-          })()}
-        </div>
-
-        <div class="text-block" style="background:var(--brand-soft);border:1px solid rgba(234,90,24,.2);border-radius:var(--r-md);padding:20px 22px;">
-          <div style="font-size:12px;font-weight:700;color:var(--brand);letter-spacing:.5px;text-transform:uppercase;margin-bottom:10px;">🎯 ทำก่อนเลยสัปดาห์นี้</div>
-          <div style="white-space:pre-wrap;font-size:16px;line-height:1.9;color:var(--text);">${escapeHTML(actionPlan)}</div>
-        </div>
-
-        <div class="result-lock">
-          <div class="result-lock-inner result-lock-blur">
-            <h3>วิเคราะห์เชิงลึก + แผน 30 วัน</h3>
-            <p class="result-highlight">ตอบเพิ่มอีก 5 ข้อ แล้วเราจะบอกได้เลยว่า Shopee ควรเป็นช่องทางขายหลัก ช่องทางสร้างความน่าเชื่อถือ หรือควรใช้แบบเลือกจังหวะ</p>
-            <div class="lock-grid">
-              <div class="lock-card"><strong>Action plan 3 ข้อที่สำคัญที่สุด</strong><span>เรียงลำดับตาม impact จริงของร้านคุณ ไม่ใช่คำแนะนำกลางๆ</span></div>
-              <div class="lock-card"><strong>แผน 30 วัน ทำได้จริง</strong><span>สัปดาห์ต่อสัปดาห์ ไม่ต้องเดาว่าจะเริ่มจากตรงไหน</span></div>
-              <div class="lock-card"><strong>ประเมิน Channel Fit</strong><span>Shopee ยังเหมาะกับสินค้านี้ไหม และควรดันยังไงต่อ</span></div>
-              <div class="lock-card"><strong>กลยุทธ์โตแบบยั่งยืน</strong><span>ไม่ใช่แค่บอกว่าแก้อะไร แต่บอกว่าทำแล้วจะเป็นยังไง</span></div>
-            </div>
-          </div>
-          <div class="result-lock-overlay">
-            <div class="lock-icon">🔒</div>
-            <div class="lock-headline">ปลดล็อกวิเคราะห์เชิงลึก<br>+ แผน 30 วัน</div>
-            <div class="lock-sub">ตอบอีก 5 ข้อ แล้วเราจะวิเคราะห์ให้ลึกกว่านี้มาก — เจาะตรงร้านคุณ ไม่ใช่แค่คำแนะนำทั่วไป</div>
-            <div class="lock-price-row">
-              <div class="lock-price">฿599</div>
-              <div class="lock-price-note">จ่ายครั้งเดียว<br>ไม่มีค่าสมาชิก</div>
-            </div>
-            <button class="btn-unlock" id="unlockDeepBtn">ปลดล็อกเลย →</button>
-            <div class="lock-guarantee">🔐 ชำระผ่าน Promptpay / โอนเงิน · ปลอดภัย 100%</div>
-          </div>
-        </div>
-
-        <div class="result-actions">
-          <button class="nav-btn" id="editQuickBtn">← กลับไปแก้คำตอบ</button>
-          <button class="nav-btn" id="restartQuickBtn">เริ่มใหม่</button>
-        </div>
-      </div>`;
-
-    document.getElementById('editQuickBtn').addEventListener('click', () => { state.phase='quick-question'; state.current=0; renderCurrent(); scrollStageTop(); });
-    document.getElementById('unlockDeepBtn').addEventListener('click', () => { state.phase='payment'; renderCurrent(); scrollStageTop(); });
-    document.getElementById('restartQuickBtn').addEventListener('click', restartAll);
-
-  } catch(e) {
-    clearInterval(loadingTimer);
-    el.stageCard.innerHTML = `<div class="result-card" style="padding:32px;"><p style="color:var(--red);">เกิดข้อผิดพลาดค่ะ — ${escapeHTML(e.message)}</p><button class="nav-btn" onclick="renderCurrent()">ลองใหม่</button></div>`;
-  }
-};
-
-/* Override renderFinalPreview — keep original template, replace content with Claude */
-const _origRenderFinalPreview = renderFinalPreview;
-renderFinalPreview = async function() {
-  const loadingTimer2 = showLoadingWithMessages([
-    `กำลังวิเคราะห์เชิงลึกร้าน ${state.profile.shopName || ''}...`,
-    'กำลังวิเคราะห์จุดที่ยอดหลุด...',
-    'กำลังประเมิน competitive positioning...',
-    'กำลังวางแผน 30 วันเฉพาะร้านคุณ...',
-    'กำลังประเมิน Channel Fit บน Shopee...',
-    'กำลังเขียน Action plan 3 ข้อหลัก...',
-    'เกือบเสร็จแล้วค่ะ รอแป๊บนึง...'
-  ]);
-
-  try {
-    const aiText = await callClaude(buildStep2Prompt());
-    clearInterval(loadingTimer2);
-    state._step2AI = aiText;
-    window._sc_step2_raw = aiText;  /* DEBUG */
-    console.log('=== STEP2 RAW ===', aiText);
-
-    const parsed = parseAISections(aiText);
-    const actionPlan = parsed.deepActions || parsed.actionPlan;
-    const plan30 = parsed.plan30;
-    const channelFit = parsed.channelFit || parsed.overview;
-
-    /* Parse action steps */
-    function parseActions(text) {
-      const lines = text.split('\n').filter(l=>l.trim());
-      const steps=[]; let cur=null;
-      lines.forEach(line=>{
-        const t=line.trim();
-        if(/^\d+\./.test(t)){if(cur)steps.push(cur);cur={title:t.replace(/^\d+\.\s*/,''),details:[]};}
-        else if(t&&cur){cur.details.push(t);}
-      });
-      if(cur)steps.push(cur);
-      return steps;
-    }
-
-    /* Parse week blocks */
-    function parseWeeks(text) {
-      const wb=text.split(/\[([^\]]+)\]/g).filter(s=>s.trim());
-      const weeks=[];
-      for(let w=0;w<wb.length;w+=2){weeks.push({label:wb[w].trim(),content:(wb[w+1]||'').trim()});}
-      return weeks;
-    }
-
-    const actions = parseActions(actionPlan);
-    const weeks = parseWeeks(plan30);
-    const p = state.profile;
-    const emailNote = state.email ? `<div class="email-sent-box" style="margin-top:0;margin-bottom:18px;">✅ รายงานฉบับเต็มส่งไปที่ <strong>${escapeHTML(state.email)}</strong> แล้วค่ะ</div>` : '';
-
-    el.stageCard.innerHTML = `
-      <div class="result-card">
-        <div class="result-top">
-          <div>
-            <div class="result-type-pill">✅ วิเคราะห์เสร็จแล้ว · ผลเต็ม</div>
-            <h2>ร้านคุณควรโตบน Shopee แบบไหน</h2>
-            <div class="result-meta-lines">
-              <div class="result-meta-line"><strong>หมวดหมู่สินค้า:</strong> ${escapeHTML(p.shopCat||'ไม่ระบุ')}</div>
-              <div class="result-meta-line"><strong>สินค้าที่อยากดัน:</strong> ${escapeHTML(p.heroProduct||'ไม่ระบุ')}</div>
-              <div class="result-meta-line"><strong>ออเดอร์ปัจจุบัน:</strong> ${escapeHTML(p.monthlyOrders||'ไม่ระบุ')}</div>
-              <div class="result-meta-line"><strong>เป้าหมาย:</strong> ${escapeHTML(p.targetOrders||'ไม่ระบุ')}</div>
-            </div>
-          </div>
-          <div class="result-badge">${getQuickVerdict()}</div>
-        </div>
-
-        ${emailNote}
-
-        ${state._step1AI ? (() => {
-          const s1overview = parseAISections(state._step1AI).overview;
-          return s1overview ? `<div style="background:var(--surface-muted);border-left:3px solid var(--brand);border-radius:var(--r-md);padding:16px 18px;margin-bottom:18px;"><div style="font-size:11px;font-weight:700;color:var(--brand);letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;">ภาพรวมร้านจากรอบแรก</div><p style="font-size:14px;line-height:1.75;color:var(--text);">${escapeHTML(s1overview)}</p></div>` : '';
-        })() : ''}
-
-        <div class="text-block">
-          <h3>3 เรื่องที่ควรโฟกัสก่อน</h3>
-          ${actions.length > 0 ? actions.map((s,idx) => {
-            const tm=s.title.match(/\([^)]*(?:นาที|ชั่วโมง|เลย)[^)]*\)/);
-            const tt=tm?tm[0]:''; const ct=s.title.replace(tm?tm[0]:'','').trim();
-            return `<div style="margin-bottom:14px;padding:16px 18px;background:${idx===0?'var(--brand-soft)':'white'};border:1px solid ${idx===0?'rgba(234,90,24,.2)':'var(--border)'};border-radius:16px;">
-              <div style="font-size:11px;font-weight:700;color:var(--brand);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">อันดับ ${idx+1}${idx===0?' : เริ่มก่อนเลย':''}</div>
-              <div style="font-weight:600;font-size:16px;margin-bottom:8px;line-height:1.4;color:var(--text);">${escapeHTML(ct)}</div>
-              ${s.details.length>0?`<div style="color:var(--text2);font-size:14px;line-height:1.85;font-weight:400;margin-top:6px;">${escapeHTML(s.details.join('\n'))}</div>`:''}
-              ${tt?`<div style="color:var(--brand);font-size:13px;margin-top:6px;font-weight:600;">${escapeHTML(tt)}</div>`:''}
-            </div>`;
-          }).join('') : `<p style="white-space:pre-wrap;">${escapeHTML(actionPlan)}</p>`}
-        </div>
-
-        <div class="text-block">
-          <h3>แผน 30 วัน — ทำอะไรก่อนหลัง</h3>
-          <p style="color:var(--text2);font-size:13px;margin-bottom:14px;">แผนนี้เรียงตาม pain หลักของร้านคุณ ไม่ใช่ template กลางๆ</p>
-          ${weeks.length > 0
-            ? `<div class="plan-weeks">${weeks.map(w=>`<div class="plan-week"><div class="plan-week-label" style="font-size:14px;font-weight:700;">${escapeHTML(w.label)}</div><div class="plan-week-detail" style="white-space:pre-wrap;font-size:14px;line-height:1.8;">${escapeHTML(w.content)}</div></div>`).join('')}</div>`
-            : `<p style="white-space:pre-wrap;">${escapeHTML(plan30)}</p>`
-          }
-        </div>
-
-        <div class="text-block">
-          <h3>ประเมิน Channel Fit — ร้านนี้ควรโตบน Shopee แบบไหน</h3>
-          <p style="white-space:pre-wrap;font-size:14px;line-height:1.75;">${escapeHTML(channelFit)}</p>
-        </div>
-
-        <div class="result-actions">
-          <button class="nav-btn" id="editDeepBtn">← กลับแก้คำถามต่อยอด</button>
-          <button class="nav-btn" id="editQuickFromFinalBtn">แก้คำตอบรอบแรก</button>
-          <button class="nav-btn" id="restartFinalBtn">เริ่มใหม่ตั้งแต่ต้น</button>
-        </div>
-      </div>`;
-
-    document.getElementById('editDeepBtn').addEventListener('click', () => { state.phase='deep-question'; state.current=0; renderCurrent(); scrollStageTop(); });
-    document.getElementById('editQuickFromFinalBtn').addEventListener('click', () => { state.phase='quick-question'; state.current=0; renderCurrent(); scrollStageTop(); });
-    document.getElementById('restartFinalBtn').addEventListener('click', restartAll);
-
-  } catch(e) {
-    clearInterval(loadingTimer2);
-    el.stageCard.innerHTML = `<div class="result-card" style="padding:32px;"><p style="color:var(--red);">เกิดข้อผิดพลาดค่ะ — ${escapeHTML(e.message)}</p><button class="nav-btn" onclick="renderCurrent()">ลองใหม่</button></div>`;
-  }
-};
 
 updateHUD();
 
